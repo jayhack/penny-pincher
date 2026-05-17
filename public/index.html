@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Penny-Pincher — bank data for agents</title>
+    <meta name="description" content="An open-source personal finance CLI. Give your agents read access to your bank data through Plaid — local-first, encrypted, broker-stateless." />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Penny-Pincher — bank data for agents" />
+    <meta property="og:description" content="An open-source personal finance CLI. Give your agents read access to your bank data through Plaid — local-first, encrypted, broker-stateless." />
+    <meta property="og:url" content="https://penny-pincher-cli.vercel.app/" />
+    <meta property="og:image" content="https://penny-pincher-cli.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Penny-Pincher — bank data for agents" />
+    <meta name="twitter:description" content="An open-source personal finance CLI. Give your agents read access to your bank data through Plaid — local-first, encrypted, broker-stateless." />
+    <meta name="twitter:image" content="https://penny-pincher-cli.vercel.app/og-image.png" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+      /* ============================================================== */
+      /* Palette — navy authority + burn-orange spark                    */
+      /* ============================================================== */
+      :root {
+        --paper:     #ffffff;
+        --lattice:   #fbf4ec;  /* faintest warm cream */
+        --bloom:     #f0cfab;  /* soft peach — lift-shadow cushion */
+        --pulse:     #d08454;  /* mid burnt orange */
+        --spark:     #e04a14;  /* burn orange — hot accent */
+        --sovereign: #142a5c;  /* navy — primary authority */
+        --deep:      #08163c;  /* deepest navy */
+        --glyph:     #0b0f22;  /* near-black with navy tint */
+        --stone:     #757e96;  /* cool slate-gray */
+      }
+
+      html, body {
+        background: var(--paper);
+        color: var(--glyph);
+        font-family: "Inter", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* === The living background ===================================== */
+      #ca-bg {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+        pointer-events: none;
+        opacity: 0.30;
+      }
+      .stage { position: relative; z-index: 1; }
+
+      /* === Type system =============================================== */
+      .display {
+        font-family: "Archivo Black", "Helvetica Neue", Arial, sans-serif;
+        font-weight: 900;
+        letter-spacing: -0.025em;
+        line-height: 0.9;
+      }
+      .display-lift {
+        font-family: "Archivo Black", "Helvetica Neue", Arial, sans-serif;
+        font-weight: 900;
+        letter-spacing: -0.025em;
+        line-height: 0.9;
+        color: var(--glyph);
+        text-shadow:
+          4px 4px 0 var(--bloom),
+          8px 8px 0 rgba(8, 22, 60, 0.20);
+      }
+      .display-lift-hero {
+        text-shadow:
+          5px 5px 0 var(--bloom),
+          10px 10px 0 rgba(8, 22, 60, 0.22);
+      }
+      .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+      .mono-up {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-weight: 500;
+      }
+      .label {
+        font-family: "Inter", sans-serif;
+        font-weight: 500;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+      .glyph-cell::before {
+        content: "▪";
+        color: var(--spark);
+        margin-right: 0.5em;
+      }
+
+      /* === Surfaces ================================================== */
+      .panel {
+        background: var(--paper);
+        border: 1.5px solid var(--glyph);
+        border-radius: 2px;
+        box-shadow: 4px 4px 0 var(--bloom);
+      }
+      .hairline-faint { height: 1px; background: rgba(11, 15, 34, 0.15); }
+
+      /* === Nav brand wordmark (Archivo Black + bloom lift) ============ */
+      .brand-display {
+        font-family: "Archivo Black", "Helvetica Neue", Arial, sans-serif;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        text-transform: uppercase;
+        line-height: 1;
+        color: var(--glyph);
+        text-shadow:
+          2px 2px 0 var(--bloom),
+          4px 4px 0 rgba(8, 22, 60, 0.18);
+        font-size: clamp(15px, 2.2vw, 20px);
+        margin-right: 4px;
+      }
+
+      /* === Dark GitHub button ======================================== */
+      .btn-gh {
+        background: var(--glyph);
+        color: #fff;
+        padding: 9px 14px;
+        border: 1.5px solid var(--glyph);
+        border-radius: 2px;
+        font-family: "JetBrains Mono", monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 11px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 2px 0 var(--bloom);
+        text-decoration: none;
+        transition: transform 80ms ease, box-shadow 80ms ease, background 80ms ease;
+      }
+      .btn-gh:hover { background: #1a2042; }
+      .btn-gh:active { transform: translateY(2px); box-shadow: none; }
+      .btn-gh svg { width: 15px; height: 15px; fill: currentColor; display: block; }
+
+      /* === Ghost link (legacy — kept for any inline use) =============== */
+      .btn-ghost {
+        color: var(--spark);
+        font-family: "JetBrains Mono", monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 12px;
+        font-weight: 600;
+        border-bottom: 1px solid var(--spark);
+        padding-bottom: 2px;
+        text-decoration: none;
+      }
+
+      /* === Code blocks (ink / dark) =================================== */
+      .code-block {
+        background: var(--glyph);
+        border: 1.5px solid var(--glyph);
+        border-radius: 2px;
+        box-shadow: 4px 4px 0 var(--sovereign);
+        padding: 18px 20px;
+        overflow-x: auto;
+      }
+      .code-block code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.7;
+        color: var(--paper);
+        white-space: pre;
+      }
+      .code-block .cmd-prompt {
+        color: var(--spark);
+        user-select: none;
+        margin-right: 8px;
+      }
+      .code-block .cmt {
+        color: var(--stone);
+      }
+      .code-block .env {
+        color: var(--bloom);
+        font-weight: 700;
+      }
+
+      /* === Step number =============================================== */
+      .step-no {
+        font-family: "Archivo Black", sans-serif;
+        font-size: 28px;
+        line-height: 1;
+        color: var(--spark);
+      }
+
+      /* === Command list table ======================================== */
+      .cmd-row {
+        display: block;
+        padding: 14px;
+        border-top: 1px solid rgba(11, 15, 34, 0.15);
+      }
+      .cmd-row:first-child { border-top: none; }
+      .cmd-row .cmd {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        font-weight: 700;
+        color: var(--glyph);
+        margin-bottom: 6px;
+      }
+      .cmd-row .desc {
+        font-family: "Inter", sans-serif;
+        font-size: 14px;
+        color: var(--glyph);
+        line-height: 1.55;
+      }
+      @media (max-width: 640px) {
+        .cmd-row { padding: 12px; }
+      }
+
+      /* === Hero video ================================================= */
+      .hero-video {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        background: var(--glyph);
+        border: 1.5px solid var(--glyph);
+        border-radius: 2px;
+        box-shadow: 4px 4px 0 var(--bloom);
+        overflow: hidden;
+        isolation: isolate;
+      }
+      .hero-video > video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        z-index: 1;
+        display: block;
+      }
+      .hero-video-shade {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        background:
+          linear-gradient(135deg,
+            rgba(11, 15, 34, 0.72) 0%,
+            rgba(11, 15, 34, 0.55) 22%,
+            rgba(11, 15, 34, 0.18) 48%,
+            rgba(11, 15, 34, 0.00) 70%);
+        pointer-events: none;
+      }
+      .hero-video-text {
+        position: absolute;
+        inset: 0;
+        z-index: 3;
+        padding: clamp(22px, 4.5vw, 56px);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-start;
+        gap: clamp(14px, 2.4vw, 24px);
+        pointer-events: none;
+      }
+      .hero-video-text > * { pointer-events: auto; }
+      .hero-eyebrow {
+        font-family: "JetBrains Mono", monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 10px;
+        font-weight: 700;
+        color: #ffffff;
+        background: var(--spark);
+        border: 1px solid var(--spark);
+        border-radius: 2px;
+        padding: 5px 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        text-shadow: none;
+      }
+      .hero-display {
+        font-family: "Archivo Black", "Helvetica Neue", Arial, sans-serif;
+        font-weight: 900;
+        letter-spacing: -0.025em;
+        line-height: 0.88;
+        color: #ffffff;
+        font-size: clamp(2rem, 6.6vw, 6rem);
+        margin: 0;
+        text-shadow:
+          3px 3px 0 var(--spark),
+          6px 6px 0 rgba(8, 22, 60, 0.55);
+      }
+      .hero-sub {
+        margin: 0;
+        max-width: 640px;
+        font-family: "Inter", sans-serif;
+        font-weight: 500;
+        font-size: clamp(15px, 1.8vw, 19px);
+        line-height: 1.5;
+        color: #ffffff;
+        text-shadow: 0 2px 14px rgba(8, 22, 60, 0.85);
+      }
+      .hero-sub-link {
+        color: #ffffff;
+        text-decoration: underline;
+        text-decoration-color: rgba(224, 74, 20, 0.55);
+        text-underline-offset: 5px;
+        text-decoration-thickness: 1.5px;
+        transition: text-decoration-color 120ms ease;
+      }
+      .hero-sub-link:hover { text-decoration-color: var(--spark); }
+      .btn-on-video {
+        color: #ffffff;
+        font-family: "JetBrains Mono", monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 12px;
+        font-weight: 600;
+        border-bottom: 1px solid var(--spark);
+        padding-bottom: 2px;
+        text-decoration: none;
+        text-shadow: 0 2px 10px rgba(8, 22, 60, 0.7);
+      }
+      .hero-chip {
+        position: absolute;
+        bottom: 14px;
+        right: 14px;
+        z-index: 3;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--paper);
+        background: rgba(11, 15, 34, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+        padding: 5px 10px;
+        pointer-events: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .hero-chip::before {
+        content: "▪";
+        color: var(--spark);
+      }
+      @media (max-width: 640px) {
+        .hero-video { aspect-ratio: 4 / 3; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- The living background: Conway's Game of Life -->
+    <canvas id="ca-bg" aria-hidden="true"></canvas>
+
+    <div class="stage">
+      <!-- ============================================================== -->
+      <!-- TOP BAR                                                         -->
+      <!-- ============================================================== -->
+      <header class="border-b" style="border-color: var(--glyph);">
+        <div class="max-w-[1100px] mx-auto px-6 py-4 flex items-center justify-between gap-6">
+          <a href="/" class="flex items-center gap-3" style="text-decoration: none;">
+            <svg viewBox="0 0 36 36" width="28" height="28" aria-hidden="true">
+              <g fill="#F0CFAB">
+                <rect x="0"  y="0"  width="8" height="8" rx="1"/>
+                <rect x="9"  y="0"  width="8" height="8" rx="1"/>
+                <rect x="27" y="0"  width="8" height="8" rx="1"/>
+                <rect x="18" y="9"  width="8" height="8" rx="1"/>
+                <rect x="0"  y="18" width="8" height="8" rx="1"/>
+                <rect x="18" y="18" width="8" height="8" rx="1"/>
+                <rect x="27" y="18" width="8" height="8" rx="1"/>
+                <rect x="9"  y="27" width="8" height="8" rx="1"/>
+                <rect x="18" y="27" width="8" height="8" rx="1"/>
+              </g>
+              <g fill="#E04A14">
+                <rect x="18" y="0"  width="8" height="8" rx="1"/>
+                <rect x="9"  y="9"  width="8" height="8" rx="1"/>
+                <rect x="9"  y="18" width="8" height="8" rx="1"/>
+                <rect x="0"  y="27" width="8" height="8" rx="1"/>
+                <rect x="27" y="27" width="8" height="8" rx="1"/>
+              </g>
+            </svg>
+            <span class="brand-display">PENNY-PINCHER</span>
+          </a>
+          <nav class="flex items-center gap-5">
+            <a href="#how" class="mono-up text-[10px] hidden md:inline" style="color: var(--glyph); text-decoration: none;">How</a>
+            <a href="#commands" class="mono-up text-[10px] hidden md:inline" style="color: var(--glyph); text-decoration: none;">Commands</a>
+            <a href="#backend" class="mono-up text-[10px] hidden md:inline" style="color: var(--glyph); text-decoration: none;">Backend</a>
+            <a href="https://github.com/jayhack/penny-pincher" class="btn-gh" aria-label="GitHub repository">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+              </svg>
+              <span>GitHub</span>
+            </a>
+          </nav>
+        </div>
+      </header>
+
+      <!-- ============================================================== -->
+      <!-- HERO                                                            -->
+      <!-- ============================================================== -->
+      <section class="max-w-[1100px] mx-auto px-6 pt-10 pb-16 md:pt-14 md:pb-20">
+        <div class="hero-video">
+          <video
+            src="/penny-pincher.mp4"
+            autoplay
+            muted
+            loop
+            playsinline
+            preload="auto"
+            disablepictureinpicture
+            aria-hidden="true"
+          ></video>
+          <div class="hero-video-shade"></div>
+          <div class="hero-video-text">
+            <h1 class="hero-display">PENNY-PINCHER</h1>
+            <p class="hero-sub">
+              <a href="https://github.com/jayhack/penny-pincher" class="hero-sub-link">Open-source personal finance CLI.</a>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- INSTALL                                                         -->
+      <!-- ============================================================== -->
+      <section id="install" class="max-w-[1100px] mx-auto px-6 pb-20">
+        <div class="flex items-baseline justify-between gap-4 mb-5">
+          <h2 class="label glyph-cell" style="color: var(--glyph);">§01 / Install</h2>
+          <span class="mono-up text-[10px]" style="color: var(--stone);">four lines · zero config</span>
+        </div>
+
+        <div class="code-block">
+<code><span class="cmd-prompt">$</span>npx penny-pincher auth
+<span class="cmd-prompt">$</span>npx penny-pincher accounts
+<span class="cmd-prompt">$</span>npx penny-pincher balances
+<span class="cmd-prompt">$</span>npx penny-pincher transactions --days 30</code>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- HOW IT WORKS                                                    -->
+      <!-- ============================================================== -->
+      <section id="how" class="max-w-[1100px] mx-auto px-6 pb-20">
+        <div class="flex items-baseline justify-between gap-4 mb-5">
+          <h2 class="label glyph-cell" style="color: var(--glyph);">§02 / How it works</h2>
+          <span class="mono-up text-[10px]" style="color: var(--stone);">connect · query · stay local</span>
+        </div>
+
+        <h3 class="display-lift mt-2 mb-10" style="font-size: clamp(2rem, 5vw, 3.2rem);">
+          get started
+        </h3>
+
+        <div class="grid gap-6 md:grid-cols-3">
+          <article class="panel p-6">
+            <div class="flex items-baseline justify-between mb-3">
+              <span class="step-no">01</span>
+              <span class="mono-up text-[10px]" style="color: var(--stone);">Connect</span>
+            </div>
+            <div class="hairline-faint mb-4"></div>
+            <h4 class="display mb-3" style="font-size: 22px; color: var(--glyph);">auth via plaid</h4>
+            <p class="text-[14.5px] leading-[1.6]" style="color: var(--glyph);">
+              Run <code class="mono" style="font-size: 13px; background: var(--lattice); padding: 1px 6px; border-radius: 2px;">npx penny-pincher auth</code>.
+              The CLI opens Plaid Link in your browser and stashes an encrypted token envelope at
+              <code class="mono" style="font-size: 12px; color: var(--stone);">~/.penny-pincher/config.json</code>.
+            </p>
+          </article>
+
+          <article class="panel p-6">
+            <div class="flex items-baseline justify-between mb-3">
+              <span class="step-no">02</span>
+              <span class="mono-up text-[10px]" style="color: var(--stone);">Query</span>
+            </div>
+            <div class="hairline-faint mb-4"></div>
+            <h4 class="display mb-3" style="font-size: 22px; color: var(--glyph);">Securely grab personal bank data</h4>
+            <p class="text-[14.5px] leading-[1.6]" style="color: var(--glyph);">
+              Run commands like <code class="mono" style="font-size: 13px; background: var(--lattice); padding: 1px 6px; border-radius: 2px;">balances</code>
+              or <code class="mono" style="font-size: 13px; background: var(--lattice); padding: 1px 6px; border-radius: 2px;">transactions</code>.
+              The CLI signs each request and prints JSON straight to stdout for agents and scripts.
+            </p>
+          </article>
+
+          <article class="panel p-6">
+            <div class="flex items-baseline justify-between mb-3">
+              <span class="step-no">03</span>
+              <span class="mono-up text-[10px]" style="color: var(--stone);">Stay local</span>
+            </div>
+            <div class="hairline-faint mb-4"></div>
+            <h4 class="display mb-3" style="font-size: 22px; color: var(--glyph);">No stored tokens</h4>
+            <p class="text-[14.5px] leading-[1.6]" style="color: var(--glyph);">
+              The hosted broker stores no per-user tokens. It decrypts your envelope
+              <em style="color: var(--spark); font-style: normal; font-weight: 700;">just long enough</em>
+              to call Plaid, then forgets it.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- COMMANDS                                                        -->
+      <!-- ============================================================== -->
+      <section id="commands" class="max-w-[1100px] mx-auto px-6 pb-20">
+        <div class="flex items-baseline justify-between gap-4 mb-5">
+          <h2 class="label glyph-cell" style="color: var(--glyph);">§03 / Commands</h2>
+          <span class="mono-up text-[10px]" style="color: var(--stone);">08 verbs · JSON out</span>
+        </div>
+
+        <h3 class="display-lift mb-10" style="font-size: clamp(2rem, 5vw, 3.2rem);">
+          The whole CLI.
+        </h3>
+
+        <div class="panel">
+          <div class="cmd-row">
+            <div class="cmd">penny-pincher auth</div>
+            <div class="desc">Opens Plaid Link, exchanges the public token through the broker, and saves local token metadata.</div>
+          </div>
+          <div class="cmd-row">
+            <div class="cmd">penny-pincher accounts</div>
+            <div class="desc">Print linked accounts.</div>
+          </div>
+          <div class="cmd-row">
+            <div class="cmd">penny-pincher balances</div>
+            <div class="desc">Print accounts with current and available balances.</div>
+          </div>
+          <div class="cmd-row">
+            <div class="cmd">penny-pincher transactions --days 30</div>
+            <div class="desc">Print recent transactions. <span style="color: var(--stone);">Also accepts <code class="mono">--start</code> / <code class="mono">--end</code>.</span></div>
+          </div>
+          <div class="cmd-row">
+            <div class="cmd">penny-pincher identity</div>
+            <div class="desc">Print account owner identity data when the product is enabled.</div>
+          </div>
+          <div class="cmd-row">
+            <div class="cmd">penny-pincher numbers</div>
+            <div class="desc">Print ACH / routing data when the Plaid <code class="mono">auth</code> product is enabled.</div>
+          </div>
+          <div class="cmd-row">
+            <div class="cmd">penny-pincher status</div>
+            <div class="desc">Print local connection metadata without exposing the access token.</div>
+          </div>
+          <div class="cmd-row">
+            <div class="cmd">penny-pincher logout</div>
+            <div class="desc">Remove the saved local token envelope.</div>
+          </div>
+        </div>
+
+        <p class="mt-5 mono-up text-[10px]" style="color: var(--stone);">
+          ▪ All data commands print JSON · pipe straight into <code class="mono" style="text-transform: none; letter-spacing: 0;">jq</code> or hand to an agent.
+        </p>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- HOSTED BACKEND                                                  -->
+      <!-- ============================================================== -->
+      <section id="backend" class="max-w-[1100px] mx-auto px-6 pb-20">
+        <div class="flex items-baseline justify-between gap-4 mb-5">
+          <h2 class="label glyph-cell" style="color: var(--glyph);">§04 / Self-host</h2>
+          <span class="mono-up text-[10px]" style="color: var(--stone);">vercel · 30s deploy</span>
+        </div>
+
+        <h3 class="display-lift mb-10" style="font-size: clamp(2rem, 5vw, 3.2rem);">
+          Bring your own broker.
+        </h3>
+
+        <div class="grid gap-6 md:grid-cols-2">
+          <div>
+            <p class="text-[15.5px] leading-[1.6] mb-6" style="color: var(--glyph);">
+              Deploy the repository to Vercel and set six environment variables.
+              Then point the CLI at it.
+            </p>
+
+            <div class="code-block mb-5">
+<code><span class="env">PLAID_CLIENT_ID</span>=your-client-id
+<span class="env">PLAID_SECRET</span>=your-secret
+<span class="env">PLAID_ENV</span>=sandbox
+<span class="env">PLAID_REDIRECT_URI</span>=http://localhost:7777/oauth-return
+<span class="env">PENNY_PINCHER_ENCRYPTION_KEY</span>=at-least-32-random-bytes
+<span class="env">PENNY_PINCHER_TOKEN_KEY_VERSION</span>=v1</code>
+            </div>
+
+            <p class="mono-up text-[10px]" style="color: var(--stone);">
+              ▪ Generate a strong key with
+              <code class="mono" style="text-transform: none; letter-spacing: 0; color: var(--glyph);">openssl rand -base64 32</code>
+            </p>
+          </div>
+
+          <div>
+            <p class="text-[15.5px] leading-[1.6] mb-6" style="color: var(--glyph);">
+              Or skip the broker entirely and use local Plaid credentials with
+              <code class="mono" style="font-size: 13.5px; background: var(--lattice); padding: 1px 6px; border-radius: 2px;">--direct-plaid</code>.
+            </p>
+
+            <div class="code-block">
+<code><span class="cmt"># point the CLI at your deployment</span>
+<span class="cmd-prompt">$</span>export <span class="env">PENNY_PINCHER_API_URL</span>=https://your-app.vercel.app
+<span class="cmd-prompt">$</span>npx penny-pincher auth
+
+<span class="cmt"># or skip the broker entirely</span>
+<span class="cmd-prompt">$</span>export <span class="env">PLAID_CLIENT_ID</span>=your-client-id
+<span class="cmd-prompt">$</span>export <span class="env">PLAID_SECRET</span>=your-secret
+<span class="cmd-prompt">$</span>npx penny-pincher auth --direct-plaid</code>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- FOOTER                                                          -->
+      <!-- ============================================================== -->
+      <footer class="border-t" style="border-color: var(--glyph);">
+        <div class="max-w-[1100px] mx-auto px-6 py-10 grid gap-8 md:grid-cols-3 items-start">
+          <div>
+            <div class="display-lift" style="font-size: 32px;">PENNY-PINCHER</div>
+            <p class="mt-4 text-[13.5px] leading-[1.55]" style="color: var(--stone);">
+              Open-source CLI for bank data via Plaid.
+            </p>
+          </div>
+
+          <div>
+            <div class="mono-up text-[10px] mb-3" style="color: var(--stone);">▪ Links</div>
+            <ul class="space-y-2 text-[13.5px]" style="color: var(--glyph);">
+              <li><a href="https://github.com/jayhack/penny-pincher" style="color: var(--glyph); text-decoration: none;">github.com/jayhack/penny-pincher →</a></li>
+              <li><a href="https://www.npmjs.com/package/penny-pincher" style="color: var(--glyph); text-decoration: none;">npmjs.com/package/penny-pincher →</a></li>
+              <li><a href="https://plaid.com/docs" style="color: var(--glyph); text-decoration: none;">Plaid docs →</a></li>
+            </ul>
+          </div>
+
+          <div class="md:text-right">
+            <div class="mono text-[10px] mb-3 font-medium" style="color: var(--stone); letter-spacing: 0.08em;">
+              Built by <a href="https://jay.ai" style="color: var(--glyph); text-decoration: none;">Jay Hack</a>
+            </div>
+            <div class="mono text-[12px]" style="color: var(--glyph);">
+              <div>MIT · © 2026</div>
+              <div style="color: var(--stone);">node ≥ 20 · plaid-node · zod</div>
+            </div>
+          </div>
+        </div>
+        <div class="max-w-[1100px] mx-auto px-6 pb-8">
+          <div class="hairline-faint mb-4"></div>
+          <div class="flex items-center justify-between gap-4 flex-wrap">
+            <span class="mono-up text-[10px]" style="color: var(--stone);">▪ B3/S23 forever</span>
+            <span class="mono-up text-[10px]" style="color: var(--stone);">navy & ember · automata vibe</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- Conway's Game of Life — the living background                   -->
+    <!-- ============================================================== -->
+    <script>
+      (function () {
+        const canvas = document.getElementById("ca-bg");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d", { alpha: true });
+        const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
+        const CELL_SIZE = 44;
+        const CELL_GAP = 4;
+        const STEP_MS = 1200;
+        const EASE_IN = 0.032;
+        const EASE_OUT = 0.020;
+        const MAX_ALPHA = 0.72;
+        const CELL_RGB = [195, 210, 240];
+
+        let cols = 0, rows = 0;
+        let grid = new Uint8Array(0);
+        let alpha = new Float32Array(0);
+        let target = new Float32Array(0);
+        let generation = 0;
+        let lastStep = 0;
+
+        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        function resize() {
+          const w = window.innerWidth;
+          const h = window.innerHeight;
+          canvas.width = Math.floor(w * dpr);
+          canvas.height = Math.floor(h * dpr);
+          canvas.style.width = w + "px";
+          canvas.style.height = h + "px";
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+          const pitch = CELL_SIZE + CELL_GAP;
+          cols = Math.ceil(w / pitch) + 1;
+          rows = Math.ceil(h / pitch) + 1;
+          const n = cols * rows;
+          grid = new Uint8Array(n);
+          alpha = new Float32Array(n);
+          target = new Float32Array(n);
+          seed(0.22);
+          syncTargets();
+        }
+
+        function idx(x, y) {
+          return ((y + rows) % rows) * cols + ((x + cols) % cols);
+        }
+
+        function seed(density) {
+          for (let i = 0; i < grid.length; i++) {
+            if (Math.random() < density) grid[i] = 1;
+          }
+        }
+
+        function sprinkle(density) {
+          for (let i = 0; i < grid.length; i++) {
+            if (Math.random() < density) grid[i] = 1;
+          }
+        }
+
+        function syncTargets() {
+          for (let i = 0; i < grid.length; i++) {
+            target[i] = grid[i] ? MAX_ALPHA : 0;
+          }
+        }
+
+        function step() {
+          const next = new Uint8Array(grid.length);
+          for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+              let n = 0;
+              for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                  if (dx === 0 && dy === 0) continue;
+                  n += grid[idx(x + dx, y + dy)];
+                }
+              }
+              const here = grid[idx(x, y)];
+              if (here && (n === 2 || n === 3)) next[idx(x, y)] = 1;
+              else if (!here && n === 3) next[idx(x, y)] = 1;
+            }
+          }
+          grid = next;
+          generation++;
+
+          if (generation % 80 === 0) sprinkle(0.05);
+          if (generation % 320 === 0) sprinkle(0.24);
+
+          syncTargets();
+        }
+
+        function draw() {
+          const w = canvas.width / dpr;
+          const h = canvas.height / dpr;
+          ctx.clearRect(0, 0, w, h);
+          const pitch = CELL_SIZE + CELL_GAP;
+          for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+              const i = y * cols + x;
+              const a = alpha[i];
+              if (a <= 0.003) continue;
+              ctx.fillStyle = `rgba(${CELL_RGB[0]}, ${CELL_RGB[1]}, ${CELL_RGB[2]}, ${a})`;
+              ctx.fillRect(x * pitch, y * pitch, CELL_SIZE, CELL_SIZE);
+            }
+          }
+        }
+
+        function frame(now) {
+          if (!lastStep) lastStep = now;
+          if (now - lastStep >= STEP_MS) {
+            step();
+            lastStep = now;
+          }
+          let dirty = false;
+          for (let i = 0; i < alpha.length; i++) {
+            const t = target[i];
+            const a = alpha[i];
+            if (a !== t) {
+              const ease = t > a ? EASE_IN : EASE_OUT;
+              const next = a + (t - a) * ease;
+              alpha[i] = Math.abs(next - t) < 0.002 ? t : next;
+              dirty = true;
+            }
+          }
+          if (dirty) draw();
+          requestAnimationFrame(frame);
+        }
+
+        function staticPaint() {
+          for (let i = 0; i < alpha.length; i++) alpha[i] = target[i];
+          draw();
+        }
+
+        resize();
+        let resizeRaf = 0;
+        window.addEventListener("resize", () => {
+          if (resizeRaf) cancelAnimationFrame(resizeRaf);
+          resizeRaf = requestAnimationFrame(() => {
+            resize();
+            if (reducedMotion) staticPaint();
+          });
+        });
+
+        if (reducedMotion) {
+          staticPaint();
+        } else {
+          for (let i = 0; i < alpha.length; i++) alpha[i] = 0;
+          requestAnimationFrame(frame);
+        }
+      })();
+    </script>
+  </body>
+</html>

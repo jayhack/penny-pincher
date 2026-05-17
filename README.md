@@ -1,56 +1,102 @@
-# Finclaw
+# Penny Pincher
 
-Finclaw is an agent-friendly CLI for connecting a bank account with Plaid and reading account data as JSON.
+Penny Pincher is an agent-friendly CLI for connecting a bank account with Plaid and reading account data as JSON.
 
 ```sh
-npx finclaw auth
-npx finclaw accounts
-npx finclaw balances
-npx finclaw transactions --days 30
+npx -p penny-pincher penny-pincher auth
+npx -p penny-pincher penny-pincher accounts
+npx -p penny-pincher penny-pincher balances
+npx -p penny-pincher penny-pincher transactions --days 30
 ```
 
 ## Setup
 
-Create a Plaid app and export your credentials:
+The default CLI flow uses the hosted Penny Pincher backend:
 
 ```sh
-export PLAID_CLIENT_ID=your-client-id
-export PLAID_SECRET=your-secret
-export PLAID_ENV=sandbox
+npx -p penny-pincher penny-pincher auth
 ```
 
-You can also put those values in a `.env` file in the directory where you run `finclaw`.
+The backend creates Plaid Link tokens, exchanges public tokens, and proxies Plaid data requests. The CLI stores an encrypted token envelope and a local signing key at `~/.penny-pincher/config.json`.
 
-For Chase and other OAuth institutions, configure a Plaid redirect URI and use the same URI locally:
+If you deploy your own backend, point the CLI at it:
 
 ```sh
-export PLAID_REDIRECT_URI=http://localhost:7777/oauth-return
-npx finclaw auth --env development --port 7777
+export PENNY_PINCHER_API_URL=https://your-vercel-app.vercel.app
+npx -p penny-pincher penny-pincher auth
+```
+
+Production Plaid is the default for the hosted backend. For sandbox testing, pass `--env sandbox`:
+
+```sh
+npx -p penny-pincher penny-pincher auth --env sandbox
 ```
 
 ## Commands
 
-- `finclaw auth` opens Plaid Link, exchanges the public token, and saves the access token at `~/.finclaw/config.json`.
-- `finclaw accounts` prints linked accounts.
-- `finclaw balances` prints accounts with balances.
-- `finclaw transactions --days 30` prints recent transactions.
-- `finclaw identity` prints account owner identity data when the product is enabled.
-- `finclaw numbers` prints ACH/routing data when the Plaid `auth` product is enabled.
-- `finclaw status` prints local connection metadata without exposing the access token.
-- `finclaw logout` removes the saved local token.
+- `penny-pincher auth` opens Plaid Link, exchanges the public token through the backend, and saves local token metadata.
+- `penny-pincher accounts` prints linked accounts.
+- `penny-pincher balances` prints accounts with balances.
+- `penny-pincher transactions --days 30` prints recent transactions.
+- `penny-pincher identity` prints account owner identity data when the product is enabled.
+- `penny-pincher numbers` prints ACH/routing data when the Plaid `auth` product is enabled.
+- `penny-pincher status` prints local connection metadata without exposing the access token.
+- `penny-pincher logout` removes the saved local token.
 
 All data commands print JSON so another agent or script can parse them directly.
 
 ## Security Notes
 
-Finclaw stores your Plaid access token locally in `~/.finclaw/config.json` with `0600` file permissions. Treat that file like a password. Do not commit it, paste it into prompts, or share it.
+The hosted backend stores your Plaid app credentials in Vercel environment variables. It does not need to store per-user Plaid access tokens. Instead, it returns an encrypted token envelope to the CLI. Data commands send that envelope back with a signed request; the backend decrypts the envelope just long enough to call Plaid.
 
-Finclaw does not proxy your bank data through a hosted service. The CLI talks to Plaid from your machine using your Plaid credentials.
+Penny Pincher stores the encrypted envelope and a local private signing key in `~/.penny-pincher/config.json` with `0600` file permissions. Treat that file like a password. If someone steals the full file, they can query data until you revoke the Plaid Item or rotate backend encryption keys.
+
+## Vercel Backend
+
+Deploy this repository to Vercel and set:
+
+```sh
+PLAID_CLIENT_ID=your-client-id
+PLAID_SECRET=your-secret
+PLAID_SANDBOX_SECRET=your-sandbox-secret
+PLAID_ENV=production
+PLAID_REDIRECT_URI=https://penny-pincher-cli.vercel.app/oauth-return
+PENNY_PINCHER_ENCRYPTION_KEY=at-least-32-random-bytes
+PENNY_PINCHER_TOKEN_KEY_VERSION=v1
+```
+
+Generate a strong encryption key with:
+
+```sh
+openssl rand -base64 32
+```
+
+The Vercel API exposes:
+
+- `POST /api/link-token`
+- `POST /api/exchange`
+- `POST /api/accounts`
+- `POST /api/balances`
+- `POST /api/transactions`
+- `POST /api/identity`
+- `POST /api/numbers`
+
+## Bring Your Own Plaid App
+
+You can still run the CLI without the hosted broker by using local Plaid credentials:
+
+```sh
+export PLAID_CLIENT_ID=your-client-id
+export PLAID_SECRET=your-secret
+export PLAID_ENV=sandbox
+npx -p penny-pincher penny-pincher auth --direct-plaid
+```
 
 ## Development
 
 ```sh
 npm install
+npm run typecheck
 npm run build
 npm run dev -- status
 ```
@@ -58,5 +104,6 @@ npm run dev -- status
 Publishing is intentionally left to the package owner:
 
 ```sh
+npm login
 npm publish
 ```

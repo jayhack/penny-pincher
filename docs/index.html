@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Finclaw</title>
+    <title>Penny Pincher</title>
     <meta name="description" content="Agent-friendly CLI for connecting to bank data through Plaid." />
     <style>
       :root {
@@ -61,51 +61,61 @@
   </head>
   <body>
     <main>
-      <h1>Finclaw</h1>
-      <p class="lede">A tiny CLI that lets an agent read your bank account data through Plaid, from your machine, as JSON.</p>
+      <h1>Penny Pincher</h1>
+      <p class="lede">A tiny CLI that lets an agent read your bank account data through Plaid, using a stateless hosted broker and JSON-first commands.</p>
 
-      <pre><code>npx finclaw auth
-npx finclaw accounts
-npx finclaw balances
-npx finclaw transactions --days 30</code></pre>
+      <pre><code>npx penny-pincher auth
+npx penny-pincher accounts
+npx penny-pincher balances
+npx penny-pincher transactions --days 30</code></pre>
 
       <h2>How It Works</h2>
       <div class="grid">
         <section class="card">
           <h3>1. Connect</h3>
-          <p>Run <code>npx finclaw auth</code>. Finclaw opens Plaid Link in your browser and saves the exchanged access token locally.</p>
+          <p>Run <code>npx penny-pincher auth</code>. Penny Pincher opens Plaid Link in your browser and saves an encrypted token envelope locally.</p>
         </section>
         <section class="card">
           <h3>2. Query</h3>
-          <p>Run commands like <code>balances</code> or <code>transactions</code>. Output is JSON so agents and scripts can parse it.</p>
+          <p>Run commands like <code>balances</code> or <code>transactions</code>. The CLI signs each request and prints JSON for agents and scripts.</p>
         </section>
         <section class="card">
           <h3>3. Stay Local</h3>
-          <p>Finclaw stores token metadata at <code>~/.finclaw/config.json</code> and talks directly to Plaid. There is no hosted Finclaw backend.</p>
+          <p>The backend stores no per-user tokens. It decrypts the local envelope only long enough to call Plaid.</p>
         </section>
       </div>
 
-      <h2>Credentials</h2>
-      <p>Create a Plaid app, then set:</p>
-      <pre><code>export PLAID_CLIENT_ID=your-client-id
-export PLAID_SECRET=your-secret
-export PLAID_ENV=sandbox</code></pre>
+      <h2>Hosted Backend</h2>
+      <p>Deploy the repository to Vercel and configure these environment variables:</p>
+      <pre><code>PLAID_CLIENT_ID=your-client-id
+PLAID_SECRET=your-secret
+PLAID_ENV=sandbox
+PLAID_REDIRECT_URI=http://localhost:7777/oauth-return
+PENNY_PINCHER_ENCRYPTION_KEY=generated-with-openssl-rand-base64-32
+PENNY_PINCHER_TOKEN_KEY_VERSION=v1</code></pre>
 
-      <p>For Chase and other OAuth institutions, configure a Plaid redirect URI such as:</p>
-      <pre><code>export PLAID_REDIRECT_URI=http://localhost:7777/oauth-return
-npx finclaw auth --env development --port 7777</code></pre>
+      <p>Point the CLI at your deployment if you are not using the default endpoint:</p>
+      <pre><code>export PENNY_PINCHER_API_URL=https://your-vercel-app.vercel.app
+npx penny-pincher auth</code></pre>
 
       <h2>Commands</h2>
-      <pre><code>finclaw auth
-finclaw accounts
-finclaw balances
-finclaw transactions --start 2026-04-01 --end 2026-05-01
-finclaw identity
-finclaw numbers
-finclaw status
-finclaw logout</code></pre>
+      <pre><code>penny-pincher auth
+penny-pincher accounts
+penny-pincher balances
+penny-pincher transactions --start 2026-04-01 --end 2026-05-01
+penny-pincher identity
+penny-pincher numbers
+penny-pincher status
+penny-pincher logout</code></pre>
 
-      <p>See the <a href="https://github.com/jayhack/finclaw">GitHub repository</a> for source and publishing instructions.</p>
+      <h2>Bring Your Own Plaid</h2>
+      <p>Developers can skip the hosted broker and use local Plaid credentials:</p>
+      <pre><code>export PLAID_CLIENT_ID=your-client-id
+export PLAID_SECRET=your-secret
+export PLAID_ENV=sandbox
+npx penny-pincher auth --direct-plaid</code></pre>
+
+      <p>See the <a href="https://github.com/jayhack/penny-pincher">GitHub repository</a> for source and publishing instructions.</p>
     </main>
   </body>
 </html>

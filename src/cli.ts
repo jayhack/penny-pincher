@@ -3,32 +3,40 @@ import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import { Command, Option } from "commander";
 import { runAuthFlow } from "./auth.js";
-import { clearLinkedAccount, configPath, loadConfig, plaidEnvironments, type PlaidEnvironment } from "./config.js";
+import { clearLinkedAccount, configPath, loadConfig, normalizePlaidEnvironment, plaidEnvironments } from "./config.js";
 import { getAccountNumbers, getAccounts, getBalances, getIdentity, getStatus, getTransactions } from "./data.js";
 
 const program = new Command();
 
 program
-  .name("finclaw")
-  .description("Agent-friendly CLI for reading your bank data through Plaid.")
-  .version("0.1.0");
+  .name("penny-pincher")
+  .description("Agent-friendly CLI for reading bank data through Plaid.")
+  .version("0.1.1");
 
 program
   .command("auth")
-  .description("Connect a bank account with Plaid Link and save a local access token.")
+  .description("Connect a bank account with Plaid Link and save local token metadata.")
   .addOption(environmentOption())
   .option("-p, --products <products>", "Comma-separated Plaid products to request.", "transactions")
   .option("-c, --country-codes <codes>", "Comma-separated country codes.", "US")
   .option("--port <port>", "Local auth server port.", parsePort, 7777)
+  .option(
+    "--backend <url>",
+    "Penny Pincher backend URL.",
+    process.env.PENNY_PINCHER_API_URL ?? process.env.PENNY_PINCER_API_URL ?? process.env.FINCLAW_API_URL
+  )
+  .option("--direct-plaid", "Use local Plaid credentials instead of the hosted Penny Pincher backend.")
   .option("--no-open", "Print the auth URL instead of opening a browser.")
   .action(async (options) => {
-    const environment = resolveEnvironment(options.environment);
+    const environment = resolveEnvironment(options.env);
     const config = await runAuthFlow({
       environment,
       products: splitList(options.products),
       countryCodes: splitList(options.countryCodes),
       port: options.port,
       openBrowser: options.open,
+      directPlaid: Boolean(options.directPlaid),
+      backendUrl: options.backend,
       onReady: (url) => {
         if (!options.open) {
           console.error(chalk.cyan(`Open ${url} to connect your bank account.`));
@@ -75,7 +83,7 @@ program
 
 program
   .command("status")
-  .description("Print local Finclaw connection status.")
+  .description("Print local Penny Pincher connection status.")
   .action(async () => printJson(await getStatus()));
 
 program
@@ -89,7 +97,7 @@ program
 program.exitOverride();
 
 main().catch((error) => {
-  if (error?.code === "commander.helpDisplayed") {
+  if (error?.code === "commander.helpDisplayed" || error?.code === "commander.version") {
     return;
   }
 
@@ -109,17 +117,21 @@ async function main(): Promise<void> {
 async function promptForCommand(): Promise<void> {
   const config = await loadConfig();
   const action = await select({
-    message: "What do you want Finclaw to do?",
+    message: "What do you want Penny Pincher to do?",
     choices: [
-      { name: config.accessToken ? "Reconnect bank account" : "Connect bank account", value: "auth" },
-      { name: "Show accounts", value: "accounts", disabled: !config.accessToken && "Run auth first" },
-      { name: "Show balances", value: "balances", disabled: !config.accessToken && "Run auth first" },
-      { name: "Show recent transactions", value: "transactions", disabled: !config.accessToken && "Run auth first" },
+      { name: config.tokenEnvelope || config.accessToken ? "Reconnect bank account" : "Connect bank account", value: "auth" },
+      { name: "Show accounts", value: "accounts", disabled: !isLinked(config) && "Run auth first" },
+      { name: "Show balances", value: "balances", disabled: !isLinked(config) && "Run auth first" },
+      { name: "Show recent transactions", value: "transactions", disabled: !isLinked(config) && "Run auth first" },
       { name: "Show connection status", value: "status" }
     ]
   });
 
-  await program.parseAsync(["node", "finclaw", action]);
+  await program.parseAsync(["node", "penny-pincher", action]);
+}
+
+function isLinked(config: Awaited<ReturnType<typeof loadConfig>>): boolean {
+  return Boolean(config.tokenEnvelope || config.accessToken);
 }
 
 function printJson(value: unknown): void {
@@ -133,20 +145,14 @@ function splitList(value: string): string[] {
     .filter(Boolean);
 }
 
-function resolveEnvironment(value: string | undefined): PlaidEnvironment {
-  const environment = value ?? process.env.PLAID_ENV ?? "sandbox";
-
-  if (!plaidEnvironments.includes(environment as PlaidEnvironment)) {
-    throw new Error(`Invalid Plaid environment "${environment}". Use sandbox, development, or production.`);
-  }
-
-  return environment as PlaidEnvironment;
+function resolveEnvironment(value: string | undefined) {
+  return normalizePlaidEnvironment(value ?? process.env.PLAID_ENV);
 }
 
 function environmentOption(): Option {
   return new Option("--env <env>", "Plaid environment.")
-    .choices([...plaidEnvironments])
-    .default(process.env.PLAID_ENV ?? "sandbox");
+    .choices([...plaidEnvironments, "prod"])
+    .default(process.env.PLAID_ENV ?? "production");
 }
 
 function parsePort(value: string): number {

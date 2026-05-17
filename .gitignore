@@ -1,8 +1,13 @@
 node_modules/
 dist/
 .claude/
+.vercel/
 .DS_Store
 .env
 .env.*
 !.env.example
 npm-debug.log*
+
+# agent-secret-manager
+.agent-secret-manager/
+.vercel

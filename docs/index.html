@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Finclaw</title>
+    <meta name="description" content="Agent-friendly CLI for connecting to bank data through Plaid." />
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+      body {
+        margin: 0;
+      }
+      main {
+        margin: 0 auto;
+        max-width: 860px;
+        padding: 56px 24px 80px;
+      }
+      h1 {
+        font-size: clamp(44px, 8vw, 82px);
+        letter-spacing: -0.06em;
+        line-height: 0.95;
+        margin: 0 0 18px;
+      }
+      h2 {
+        margin-top: 44px;
+      }
+      .lede {
+        color: color-mix(in srgb, CanvasText 72%, transparent);
+        font-size: 22px;
+        max-width: 680px;
+      }
+      pre {
+        background: rgba(127, 127, 127, 0.14);
+        border: 1px solid rgba(127, 127, 127, 0.24);
+        border-radius: 16px;
+        overflow: auto;
+        padding: 18px;
+      }
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .card {
+        border: 1px solid rgba(127, 127, 127, 0.24);
+        border-radius: 16px;
+        padding: 18px;
+      }
+      a {
+        color: inherit;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Finclaw</h1>
+      <p class="lede">A tiny CLI that lets an agent read your bank account data through Plaid, from your machine, as JSON.</p>
+
+      <pre><code>npx finclaw auth
+npx finclaw accounts
+npx finclaw balances
+npx finclaw transactions --days 30</code></pre>
+
+      <h2>How It Works</h2>
+      <div class="grid">
+        <section class="card">
+          <h3>1. Connect</h3>
+          <p>Run <code>npx finclaw auth</code>. Finclaw opens Plaid Link in your browser and saves the exchanged access token locally.</p>
+        </section>
+        <section class="card">
+          <h3>2. Query</h3>
+          <p>Run commands like <code>balances</code> or <code>transactions</code>. Output is JSON so agents and scripts can parse it.</p>
+        </section>
+        <section class="card">
+          <h3>3. Stay Local</h3>
+          <p>Finclaw stores token metadata at <code>~/.finclaw/config.json</code> and talks directly to Plaid. There is no hosted Finclaw backend.</p>
+        </section>
+      </div>
+
+      <h2>Credentials</h2>
+      <p>Create a Plaid app, then set:</p>
+      <pre><code>export PLAID_CLIENT_ID=your-client-id
+export PLAID_SECRET=your-secret
+export PLAID_ENV=sandbox</code></pre>
+
+      <p>For Chase and other OAuth institutions, configure a Plaid redirect URI such as:</p>
+      <pre><code>export PLAID_REDIRECT_URI=http://localhost:7777/oauth-return
+npx finclaw auth --env development --port 7777</code></pre>
+
+      <h2>Commands</h2>
+      <pre><code>finclaw auth
+finclaw accounts
+finclaw balances
+finclaw transactions --start 2026-04-01 --end 2026-05-01
+finclaw identity
+finclaw numbers
+finclaw status
+finclaw logout</code></pre>
+
+      <p>See the repository README for source and publishing instructions.</p>
+    </main>
+  </body>
+</html>

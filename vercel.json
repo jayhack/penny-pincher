@@ -23,6 +23,10 @@
       "dest": "/public/connect.html"
     },
     {
+      "src": "/faq",
+      "dest": "/public/faq.html"
+    },
+    {
       "src": "/oauth-return",
       "dest": "/public/oauth-return.html"
     },

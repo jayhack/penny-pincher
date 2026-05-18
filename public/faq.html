@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FAQ — Penny-Pincher</title>
+    <meta name="description" content="Common questions about Penny-Pincher, the personal finance CLI for agents." />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+      :root {
+        --paper: #ffffff;
+        --lattice: #fbf4ec;
+        --bloom: #f0cfab;
+        --spark: #e04a14;
+        --sovereign: #142a5c;
+        --glyph: #0b0f22;
+        --stone: #757e96;
+      }
+      html, body {
+        background: var(--paper);
+        color: var(--glyph);
+        font-family: "Inter", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      #ca-bg {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+        pointer-events: none;
+        opacity: 0.30;
+      }
+      .stage { position: relative; z-index: 1; }
+      .display-lift {
+        font-family: "Archivo Black", "Helvetica Neue", Arial, sans-serif;
+        font-weight: 900;
+        letter-spacing: -0.025em;
+        line-height: 0.9;
+        color: var(--glyph);
+        text-shadow: 4px 4px 0 var(--bloom), 8px 8px 0 rgba(8, 22, 60, 0.20);
+      }
+      .brand-display {
+        font-family: "Archivo Black", "Helvetica Neue", Arial, sans-serif;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        text-transform: uppercase;
+        line-height: 1;
+        color: var(--glyph);
+        text-shadow: 2px 2px 0 var(--bloom), 4px 4px 0 rgba(8, 22, 60, 0.18);
+        font-size: clamp(15px, 2.2vw, 20px);
+        margin-right: 4px;
+      }
+      .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+      .mono-up {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-weight: 500;
+      }
+      .label {
+        font-family: "Inter", sans-serif;
+        font-weight: 500;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+      .glyph-cell::before {
+        content: "▪";
+        color: var(--spark);
+        margin-right: 0.5em;
+      }
+      .btn-gh {
+        background: var(--glyph);
+        color: #fff;
+        padding: 9px 14px;
+        border: 1.5px solid var(--glyph);
+        border-radius: 2px;
+        font-family: "JetBrains Mono", monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 11px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 2px 0 var(--bloom);
+        text-decoration: none;
+      }
+      .btn-gh svg { width: 15px; height: 15px; fill: currentColor; display: block; }
+      .faq-card {
+        background: var(--paper);
+        border: 1.5px solid var(--glyph);
+        border-radius: 2px;
+        box-shadow: 4px 4px 0 var(--bloom);
+        padding: clamp(20px, 3vw, 30px);
+      }
+      .faq-card h2 {
+        font-family: "Archivo Black", "Helvetica Neue", Arial, sans-serif;
+        font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+        line-height: 1;
+        margin: 0 0 14px;
+      }
+      .faq-card p {
+        margin: 0;
+        color: var(--glyph);
+        font-size: 15.5px;
+        line-height: 1.65;
+      }
+      .faq-card code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        background: var(--lattice);
+        padding: 1px 6px;
+        border-radius: 2px;
+      }
+      .hairline-faint { height: 1px; background: rgba(11, 15, 34, 0.15); }
+    </style>
+  </head>
+
+  <body>
+    <canvas id="ca-bg" aria-hidden="true"></canvas>
+
+    <div class="stage">
+      <header class="border-b sticky top-0 z-50" style="border-color: var(--glyph); background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(12px);">
+        <div class="max-w-[1100px] mx-auto px-6 py-4 flex items-center justify-between gap-6">
+          <a href="/" class="flex items-center gap-3" style="text-decoration: none;">
+            <svg viewBox="0 0 36 36" width="28" height="28" aria-hidden="true">
+              <g fill="#F0CFAB">
+                <rect x="0" y="0" width="8" height="8" rx="1"/><rect x="9" y="0" width="8" height="8" rx="1"/><rect x="27" y="0" width="8" height="8" rx="1"/>
+                <rect x="18" y="9" width="8" height="8" rx="1"/><rect x="0" y="18" width="8" height="8" rx="1"/><rect x="18" y="18" width="8" height="8" rx="1"/>
+                <rect x="27" y="18" width="8" height="8" rx="1"/><rect x="9" y="27" width="8" height="8" rx="1"/><rect x="18" y="27" width="8" height="8" rx="1"/>
+              </g>
+              <g fill="#E04A14">
+                <rect x="18" y="0" width="8" height="8" rx="1"/><rect x="9" y="9" width="8" height="8" rx="1"/><rect x="9" y="18" width="8" height="8" rx="1"/>
+                <rect x="0" y="27" width="8" height="8" rx="1"/><rect x="27" y="27" width="8" height="8" rx="1"/>
+              </g>
+            </svg>
+            <span class="brand-display">PENNY-PINCHER</span>
+          </a>
+          <nav class="flex items-center gap-5">
+            <a href="/#connect" class="mono-up text-[10px] hidden md:inline" style="color: var(--glyph); text-decoration: none;">Connect</a>
+            <a href="/#commands" class="mono-up text-[10px] hidden md:inline" style="color: var(--glyph); text-decoration: none;">Commands</a>
+            <a href="/#backend" class="mono-up text-[10px] hidden md:inline" style="color: var(--glyph); text-decoration: none;">Backend</a>
+            <a href="/faq" class="mono-up text-[10px] hidden md:inline" style="color: var(--spark); text-decoration: none;">FAQ</a>
+            <a href="https://github.com/jayhack/penny-pincher" class="btn-gh" aria-label="GitHub repository">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+              </svg>
+              <span>GitHub</span>
+            </a>
+          </nav>
+        </div>
+      </header>
+
+      <main class="max-w-[1100px] mx-auto px-6 pt-12 pb-24">
+        <div class="mb-10">
+          <div class="label glyph-cell mb-5" style="color: var(--glyph);">FAQ</div>
+          <h1 class="display-lift" style="font-size: clamp(3rem, 8vw, 6.5rem);">Questions, pinched.</h1>
+          <p class="mt-7 max-w-[760px] text-[17px] leading-[1.65]" style="color: var(--glyph);">
+            A first-pass answer sheet for agents, humans, and anyone wondering how Penny-Pincher touches bank data.
+          </p>
+        </div>
+
+        <div class="grid gap-5">
+          <section class="faq-card">
+            <h2>What is Penny-Pincher?</h2>
+            <p>Penny-Pincher is an open-source CLI that lets you connect a bank through Plaid and print account data as JSON for scripts or coding agents.</p>
+          </section>
+
+          <section class="faq-card">
+            <h2>Does Penny-Pincher see my bank password?</h2>
+            <p>No. Bank login happens inside Plaid Link. Penny-Pincher receives a Plaid public token, exchanges it through the broker, and stores a local encrypted token envelope.</p>
+          </section>
+
+          <section class="faq-card">
+            <h2>Where are credentials stored?</h2>
+            <p>The CLI stores local metadata in <code>~/.penny-pincer/config.json</code> with restrictive file permissions. Treat that file like a password because it can authorize reads through your linked Plaid item.</p>
+          </section>
+
+          <section class="faq-card">
+            <h2>What can an agent read?</h2>
+            <p>Today the CLI supports accounts, balances, transactions, identity, account/routing numbers when enabled, status, and logout. Data commands write JSON to stdout.</p>
+          </section>
+
+          <section class="faq-card">
+            <h2>Why is there a hosted backend?</h2>
+            <p>Plaid secrets must stay server-side. The hosted broker creates link tokens, exchanges public tokens, and calls Plaid without storing per-user access tokens in a database.</p>
+          </section>
+
+          <section class="faq-card">
+            <h2>Is the backend stateless?</h2>
+            <p>Yes for per-user bank tokens. The backend keeps Plaid app credentials and an encryption key in Vercel environment variables; users keep encrypted token envelopes locally.</p>
+          </section>
+
+          <section class="faq-card">
+            <h2>Can I self-host it?</h2>
+            <p>Yes. Deploy the repo to Vercel, set your Plaid credentials and Penny-Pincher encryption key, then point the CLI at your broker with <code>PENNY_PINCER_API_URL</code>.</p>
+          </section>
+
+          <section class="faq-card">
+            <h2>How do I test without a real bank?</h2>
+            <p>Use Plaid sandbox with <code>penny-pincer auth --env sandbox</code>. Sandbox institutions return fake account, balance, and transaction data.</p>
+          </section>
+
+          <section class="faq-card">
+            <h2>Can I revoke access?</h2>
+            <p><code>penny-pincer logout</code> removes the local token envelope. For complete revocation, remove the connected item in Plaid or your bank connection settings.</p>
+          </section>
+        </div>
+      </main>
+
+      <footer class="border-t" style="border-color: var(--glyph);">
+        <div class="max-w-[1100px] mx-auto px-6 py-10 flex items-center justify-between gap-4 flex-wrap">
+          <span class="mono-up text-[10px]" style="color: var(--stone);">▪ Penny-Pincher FAQ</span>
+          <a href="/" class="mono-up text-[10px]" style="color: var(--glyph); text-decoration: none;">Back home →</a>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        const canvas = document.getElementById("ca-bg");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d", { alpha: true });
+        const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        const cell = 44;
+        const gap = 4;
+        const rgb = [195, 210, 240];
+        function paint() {
+          const w = window.innerWidth;
+          const h = window.innerHeight;
+          canvas.width = Math.floor(w * dpr);
+          canvas.height = Math.floor(h * dpr);
+          canvas.style.width = w + "px";
+          canvas.style.height = h + "px";
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, w, h);
+          const pitch = cell + gap;
+          for (let y = 0; y < h + pitch; y += pitch) {
+            for (let x = 0; x < w + pitch; x += pitch) {
+              if (Math.random() < 0.2) {
+                ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.45)`;
+                ctx.fillRect(x, y, cell, cell);
+              }
+            }
+          }
+        }
+        paint();
+        window.addEventListener("resize", paint);
+      })();
+    </script>
+  </body>
+</html>

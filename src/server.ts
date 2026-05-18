@@ -264,11 +264,54 @@ async function withJsonPost(
   try {
     await handler();
   } catch (error) {
+    const plaid = extractPlaidError(error);
+    if (plaid) {
+      response.status(plaid.status).json({
+        error: plaid.message,
+        plaid: plaid.body
+      });
+      return;
+    }
+
     const status = error instanceof ApiError ? error.status : 400;
     response.status(status).json({
       error: error instanceof Error ? error.message : "Unknown Penny Pincher backend error."
     });
   }
+}
+
+function extractPlaidError(
+  error: unknown
+): { status: number; message: string; body: unknown } | undefined {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+
+  const maybeResponse = (error as { response?: unknown }).response;
+  if (typeof maybeResponse !== "object" || maybeResponse === null) {
+    return undefined;
+  }
+
+  const body = (maybeResponse as { data?: unknown }).data;
+  const status = (maybeResponse as { status?: unknown }).status;
+  if (typeof status !== "number" || typeof body !== "object" || body === null) {
+    return undefined;
+  }
+
+  const plaid = body as {
+    error_message?: string;
+    error_code?: string;
+    error_type?: string;
+    display_message?: string;
+  };
+
+  const message =
+    plaid.display_message ??
+    plaid.error_message ??
+    [plaid.error_type, plaid.error_code].filter(Boolean).join("/") ??
+    "Plaid request failed.";
+
+  return { status, message: `Plaid ${plaid.error_code ?? "ERROR"}: ${message}`, body };
 }
 
 function readInstitution(metadata: unknown): { name?: string; id?: string } {

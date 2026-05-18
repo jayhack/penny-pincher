@@ -1,5 +1,9 @@
 # Penny Pincher
 
+<p align="center">
+  <img src="public/og-image.png" alt="Penny Pincher — OSS personal finance CLI. npx penny-pincher" width="720" />
+</p>
+
 Penny Pincher is an agent-friendly CLI for connecting a bank account with Plaid and reading account data as JSON.
 
 ```sh

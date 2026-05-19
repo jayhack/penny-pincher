@@ -39,12 +39,14 @@
   },
   "dependencies": {
     "@inquirer/prompts": "latest",
+    "@neondatabase/serverless": "^1.1.0",
     "chalk": "latest",
     "commander": "latest",
     "dotenv": "latest",
     "express": "latest",
     "open": "latest",
     "plaid": "latest",
+    "stripe": "^22.1.1",
     "zod": "latest"
   },
   "devDependencies": {

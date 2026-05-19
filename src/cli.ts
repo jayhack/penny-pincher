@@ -2,9 +2,19 @@
 import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import { Command, Option } from "commander";
+import open from "open";
 import { runAuthFlow } from "./auth.js";
 import { clearLinkedAccount, configPath, loadConfig, normalizePlaidEnvironment, plaidEnvironments } from "./config.js";
-import { getAccountNumbers, getAccounts, getBalances, getIdentity, getStatus, getTransactions } from "./data.js";
+import {
+  createBillingPortal,
+  getAccountNumbers,
+  getAccounts,
+  getBalances,
+  getIdentity,
+  getStatus,
+  getTransactions,
+  getUsage
+} from "./data.js";
 
 const program = new Command();
 
@@ -87,6 +97,26 @@ program
   .action(async () => printJson(await getStatus()));
 
 program
+  .command("usage")
+  .description("Print current billing-period usage and estimated costs.")
+  .action(async () => printJson(await getUsage()));
+
+program
+  .command("billing")
+  .description("Open Stripe Customer Portal for payment and subscription management.")
+  .option("--no-open", "Print the billing portal URL instead of opening a browser.")
+  .action(async (options) => {
+    const portal = await createBillingPortal("https://penny-pincher-cli.vercel.app/");
+    if (options.open) {
+      await open(portal.url);
+      console.error(chalk.green("Opened Stripe billing portal."));
+      return;
+    }
+
+    console.error(chalk.cyan(`Open ${portal.url} to manage billing.`));
+  });
+
+program
   .command("logout")
   .description("Remove the locally saved Plaid access token.")
   .action(async () => {
@@ -123,6 +153,8 @@ async function promptForCommand(): Promise<void> {
       { name: "Show accounts", value: "accounts", disabled: !isLinked(config) && "Run auth first" },
       { name: "Show balances", value: "balances", disabled: !isLinked(config) && "Run auth first" },
       { name: "Show recent transactions", value: "transactions", disabled: !isLinked(config) && "Run auth first" },
+      { name: "Show usage and costs", value: "usage", disabled: !isHosted(config) && "Run hosted auth first" },
+      { name: "Manage billing", value: "billing", disabled: !isHosted(config) && "Run hosted auth first" },
       { name: "Show connection status", value: "status" }
     ]
   });
@@ -132,6 +164,10 @@ async function promptForCommand(): Promise<void> {
 
 function isLinked(config: Awaited<ReturnType<typeof loadConfig>>): boolean {
   return Boolean(config.tokenEnvelope || config.accessToken);
+}
+
+function isHosted(config: Awaited<ReturnType<typeof loadConfig>>): boolean {
+  return Boolean(config.backendUrl && config.publicKeyPem && config.privateKeyPem);
 }
 
 function printJson(value: unknown): void {

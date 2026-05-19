@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 import { z } from "zod";
+import { BillingError, recordUsageEvent, requireActiveBilling } from "./billing.js";
 import {
   decryptTokenEnvelope,
   encryptTokenEnvelope,
@@ -54,19 +55,37 @@ export type DataKind = "accounts" | "balances" | "transactions" | "identity" | "
 
 export async function linkTokenHandler(request: VercelRequest, response: VercelResponse): Promise<void> {
   await withJsonPost(request, response, async () => {
-    const body = linkTokenSchema.parse(request.body);
+    const signed = signedRequestSchema.parse(request.body) as SignedRequest<unknown>;
+    const body = linkTokenSchema.parse(signed.payload);
+
+    verifySignedRequest({
+      method: "POST",
+      path: "/api/link-token",
+      request: signed as SignedRequest<typeof body>,
+      publicKeyPem: body.publicKeyPem
+    });
+
+    await requireActiveBilling(body.publicKeyPem);
+
     const environment = getPlaidEnvironment(body.environment);
     const client = createServerPlaidClient(environment);
-    const link = await client.linkTokenCreate({
+    const linkRequest = {
       user: {
         client_user_id: `penny-pincher-${hashShort(body.publicKeyPem)}`
       },
       client_name: "Penny Pincher",
       products: body.products as never,
       country_codes: body.countryCodes as never,
-      language: "en",
-      redirect_uri: body.redirectUri ?? process.env.PLAID_REDIRECT_URI
-    });
+      language: "en"
+    };
+    const link = await client.linkTokenCreate(
+      body.redirectUri
+        ? {
+            ...linkRequest,
+            redirect_uri: body.redirectUri
+          }
+        : linkRequest
+    );
 
     response.status(200).json({
       linkToken: link.data.link_token,
@@ -86,6 +105,8 @@ export async function exchangeHandler(request: VercelRequest, response: VercelRe
       request: signed as SignedRequest<typeof payload>,
       publicKeyPem: payload.publicKeyPem
     });
+
+    await requireActiveBilling(payload.publicKeyPem);
 
     const environment = getPlaidEnvironment(payload.environment);
     const client = createServerPlaidClient(environment);
@@ -145,7 +166,16 @@ export async function dataHandler(
     });
 
     const client = createServerPlaidClient(envelope.environment);
+    await requireActiveBilling(envelope.publicKeyPem);
     const result = await callPlaidDataEndpoint(client, envelope.accessToken, kind, body.payload);
+    await recordUsageEvent({
+      publicKeyPem: envelope.publicKeyPem,
+      kind,
+      environment: envelope.environment,
+      itemId: envelope.itemId,
+      requestNonce: body.nonce,
+      requestedAt: body.timestamp
+    });
     response.status(200).json(result);
   });
 }
@@ -274,6 +304,11 @@ async function withJsonPost(
     }
 
     const status = error instanceof ApiError ? error.status : 400;
+    if (error instanceof BillingError) {
+      response.status(error.status).json({ error: error.message });
+      return;
+    }
+
     response.status(status).json({
       error: error instanceof Error ? error.message : "Unknown Penny Pincher backend error."
     });

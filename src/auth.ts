@@ -1,14 +1,18 @@
 import type { Server } from "node:http";
 import express from "express";
 import open from "open";
+import { setTimeout as delay } from "node:timers/promises";
 import {
+  createBillingCheckoutSession,
   createHostedLinkToken,
   defaultBackendUrl,
   exchangeHostedPublicToken,
+  getBillingStatus,
   normalizeBackendUrl
 } from "./backend.js";
+import type { BillingStatusResponse } from "./backend.js";
 import { type PennyPincherConfig, loadConfig, type PlaidEnvironment, saveConfig } from "./config.js";
-import { generateSigningKeyPair } from "./crypto.js";
+import { generateSigningKeyPair, type KeyPair } from "./crypto.js";
 import { createPlaidClient } from "./plaid.js";
 
 export interface AuthOptions {
@@ -53,14 +57,36 @@ async function runHostedAuthFlow(options: AuthOptions): Promise<PennyPincherConf
       ?? process.env.FINCLAW_API_URL
       ?? defaultBackendUrl
   );
-  const redirectUri = new URL("/oauth-return", backendUrl).toString();
+  const redirectUri = shouldUseHostedRedirectUri(backendUrl)
+    ? new URL("/oauth-return", backendUrl).toString()
+    : undefined;
+  const billing = await runBillingCheckoutFlow({
+    backendUrl,
+    keyPair,
+    port: options.port,
+    openBrowser: options.openBrowser,
+    onReady: options.onReady
+  });
+  await saveConfig({
+    ...existingConfig,
+    mode: "hosted",
+    environment: options.environment,
+    backendUrl,
+    publicKeyPem: keyPair.publicKeyPem,
+    privateKeyPem: keyPair.privateKeyPem,
+    stripeCustomerId: billing.stripeCustomerId,
+    stripeSubscriptionId: billing.stripeSubscriptionId,
+    billingStatus: billing.status,
+    billingCurrentPeriodStart: billing.currentPeriodStart,
+    billingCurrentPeriodEnd: billing.currentPeriodEnd
+  });
   const link = await createHostedLinkToken(backendUrl, {
     publicKeyPem: keyPair.publicKeyPem,
     environment: options.environment,
     products: options.products,
     countryCodes: options.countryCodes,
     redirectUri
-  });
+  }, keyPair.privateKeyPem);
 
   return runLocalLinkFlow({
     ...options,
@@ -90,13 +116,126 @@ async function runHostedAuthFlow(options: AuthOptions): Promise<PennyPincherConf
         institutionName: exchange.institutionName,
         institutionId: exchange.institutionId,
         products: exchange.products,
-        countryCodes: exchange.countryCodes
+        countryCodes: exchange.countryCodes,
+        stripeCustomerId: billing.stripeCustomerId,
+        stripeSubscriptionId: billing.stripeSubscriptionId,
+        billingStatus: billing.status,
+        billingCurrentPeriodStart: billing.currentPeriodStart,
+        billingCurrentPeriodEnd: billing.currentPeriodEnd
       };
 
       await saveConfig(config);
       return config;
     }
   });
+}
+
+async function runBillingCheckoutFlow(options: {
+  backendUrl: string;
+  keyPair: KeyPair;
+  port: number;
+  openBrowser: boolean;
+  onReady?: (url: string) => void;
+}): Promise<BillingStatusResponse> {
+  const successUrl = `http://localhost:${options.port}/billing-return`;
+  const cancelUrl = `http://localhost:${options.port}/billing-cancel`;
+  const session = await createBillingCheckoutSession(
+    options.backendUrl,
+    {
+      publicKeyPem: options.keyPair.publicKeyPem,
+      successUrl,
+      cancelUrl
+    },
+    options.keyPair.privateKeyPem
+  );
+
+  if (session.active) {
+    return session;
+  }
+
+  if (!session.checkoutUrl || !session.checkoutSessionId) {
+    throw new Error("Stripe Checkout did not return a billing URL.");
+  }
+
+  const app = express();
+  let server: Server | undefined;
+  const finished = new Promise<BillingStatusResponse>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error("Timed out waiting for Stripe Checkout to finish."));
+    }, 15 * 60 * 1000);
+
+    app.get("/", (_request, response) => {
+      response.redirect(session.checkoutUrl!);
+    });
+
+    app.get("/billing-cancel", (_request, response) => {
+      clearTimeout(timeout);
+      response.type("html").send(renderBillingPage("Billing canceled", "Run `penny-pincher auth` again when you are ready to add a payment method."));
+      reject(new Error("Stripe Checkout was canceled."));
+    });
+
+    app.get("/billing-return", async (request, response) => {
+      try {
+        const checkoutSessionId =
+          typeof request.query.session_id === "string"
+            ? request.query.session_id
+            : session.checkoutSessionId!;
+        const status = await waitForActiveBilling({
+          backendUrl: options.backendUrl,
+          publicKeyPem: options.keyPair.publicKeyPem,
+          privateKeyPem: options.keyPair.privateKeyPem,
+          checkoutSessionId
+        });
+
+        clearTimeout(timeout);
+        response.type("html").send(renderBillingPage("Billing ready", "Your payment method is saved with Stripe. Return to the terminal to finish Plaid Link."));
+        resolve(status);
+      } catch (error) {
+        clearTimeout(timeout);
+        reject(error);
+        response.status(500).type("html").send(renderBillingPage("Billing verification failed", error instanceof Error ? error.message : "Unknown billing error."));
+      }
+    });
+  }).finally(() => {
+    server?.close();
+  });
+
+  server = await listen(app, options.port);
+  options.onReady?.(session.checkoutUrl);
+
+  if (options.openBrowser) {
+    await open(session.checkoutUrl);
+  }
+
+  return finished;
+}
+
+async function waitForActiveBilling(options: {
+  backendUrl: string;
+  publicKeyPem: string;
+  privateKeyPem: string;
+  checkoutSessionId: string;
+}): Promise<BillingStatusResponse> {
+  let latest: BillingStatusResponse | undefined;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    latest = await getBillingStatus(
+      options.backendUrl,
+      {
+        publicKeyPem: options.publicKeyPem,
+        checkoutSessionId: options.checkoutSessionId
+      },
+      options.privateKeyPem
+    );
+
+    if (latest.active) {
+      return latest;
+    }
+
+    await delay(1000);
+  }
+
+  throw new Error(`Stripe billing is not active yet (status: ${latest?.status ?? "unknown"}).`);
 }
 
 async function runDirectAuthFlow(options: AuthOptions): Promise<PennyPincherConfig> {
@@ -225,6 +364,52 @@ function createHostedLinkUrl(backendUrl: string, linkToken: string, port: number
   url.searchParams.set("link_token", linkToken);
   url.searchParams.set("callback", `http://localhost:${port}/exchange`);
   return url.toString();
+}
+
+function shouldUseHostedRedirectUri(backendUrl: string): boolean {
+  const hostname = new URL(backendUrl).hostname;
+  return hostname !== "localhost" && hostname !== "127.0.0.1";
+}
+
+function renderBillingPage(title: string, message: string): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Penny-Pincher · Billing</title>
+    ${FONT_LINKS}
+    <style>${SHARED_AUTH_STYLES}</style>
+  </head>
+  <body>
+    <div class="stage">
+      <header class="top-bar">
+        <div class="top-bar-inner">
+          <a href="/" class="brand">${BRAND_SVG}<span class="brand-mark">Penny-Pincher</span></a>
+          <span class="chip">Stripe Billing</span>
+        </div>
+      </header>
+      <main>
+        <div class="label-row">
+          <span class="label">§ Billing</span>
+          <span class="label-aux">stripe → cli</span>
+        </div>
+        <h1 class="display-lift">${escapeHtml(title)}</h1>
+        <p class="lede"><span class="dim">${escapeHtml(message)}</span></p>
+      </main>
+    </div>
+  </body>
+</html>`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    if (char === "&") return "&amp;";
+    if (char === "<") return "&lt;";
+    if (char === ">") return "&gt;";
+    if (char === "\"") return "&quot;";
+    return "&#39;";
+  });
 }
 
 function listen(app: express.Express, port: number): Promise<Server> {

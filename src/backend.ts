@@ -20,6 +20,63 @@ export interface LinkTokenResponse {
   environment: "sandbox" | "development" | "production";
 }
 
+export interface BillingSessionRequest {
+  publicKeyPem: string;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+export interface BillingStatusRequest {
+  publicKeyPem: string;
+  checkoutSessionId?: string;
+}
+
+export interface BillingPortalRequest {
+  publicKeyPem: string;
+  returnUrl: string;
+}
+
+export interface BillingUsageRequest {
+  publicKeyPem: string;
+}
+
+export interface BillingStatusResponse {
+  active: boolean;
+  status: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  currentPeriodStart?: string;
+  currentPeriodEnd?: string;
+}
+
+export interface BillingSessionResponse extends BillingStatusResponse {
+  checkoutUrl?: string;
+  checkoutSessionId?: string;
+}
+
+export interface BillingPortalResponse {
+  url: string;
+}
+
+export interface BillingUsageResponse extends BillingStatusResponse {
+  totalCalls: number;
+  estimatedCents: number;
+  currency: "usd";
+  byKind: Array<{
+    kind: string;
+    calls: number;
+    estimatedCents: number;
+    pendingEvents: number;
+    failedEvents: number;
+  }>;
+  recent: Array<{
+    kind: string;
+    estimatedCents: number;
+    stripeStatus: string;
+    requestedAt: string;
+  }>;
+}
+
 export interface ExchangePayload {
   publicToken: string;
   publicKeyPem: string;
@@ -41,9 +98,49 @@ export interface ExchangeResponse {
 
 export async function createHostedLinkToken(
   backendUrl: string,
-  body: LinkTokenRequest
+  body: LinkTokenRequest,
+  privateKeyPem: string
 ): Promise<LinkTokenResponse> {
-  return postJson(backendUrl, "/api/link-token", body);
+  const signed = createSignedRequest({
+    method: "POST",
+    path: "/api/link-token",
+    payload: body,
+    privateKeyPem
+  });
+
+  return postJson(backendUrl, "/api/link-token", signed);
+}
+
+export async function createBillingCheckoutSession(
+  backendUrl: string,
+  payload: BillingSessionRequest,
+  privateKeyPem: string
+): Promise<BillingSessionResponse> {
+  return postSigned(backendUrl, "/api/billing-session", payload, privateKeyPem);
+}
+
+export async function getBillingStatus(
+  backendUrl: string,
+  payload: BillingStatusRequest,
+  privateKeyPem: string
+): Promise<BillingStatusResponse> {
+  return postSigned(backendUrl, "/api/billing-status", payload, privateKeyPem);
+}
+
+export async function createBillingPortalSession(
+  backendUrl: string,
+  payload: BillingPortalRequest,
+  privateKeyPem: string
+): Promise<BillingPortalResponse> {
+  return postSigned(backendUrl, "/api/billing-portal", payload, privateKeyPem);
+}
+
+export async function getBillingUsage(
+  backendUrl: string,
+  payload: BillingUsageRequest,
+  privateKeyPem: string
+): Promise<BillingUsageResponse> {
+  return postSigned(backendUrl, "/api/billing-usage", payload, privateKeyPem);
 }
 
 export async function exchangeHostedPublicToken(
@@ -81,6 +178,22 @@ export async function postSignedDataRequest<TPayload, TResult>(
     tokenEnvelope: options.tokenEnvelope,
     ...signed
   });
+}
+
+function postSigned<TPayload, TResult>(
+  backendUrl: string,
+  path: string,
+  payload: TPayload,
+  privateKeyPem: string
+): Promise<TResult> {
+  const signed = createSignedRequest({
+    method: "POST",
+    path,
+    payload,
+    privateKeyPem
+  });
+
+  return postJson(backendUrl, path, signed);
 }
 
 async function postJson<TResult>(backendUrl: string, path: string, body: unknown): Promise<TResult> {

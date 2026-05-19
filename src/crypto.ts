@@ -54,6 +54,10 @@ export function generateSigningKeyPair(): KeyPair {
   };
 }
 
+export function publicKeyFingerprint(publicKeyPem: string): string {
+  return createHash("sha256").update(publicKeyPem).digest("base64url");
+}
+
 export function createSignedRequest<TPayload>(
   options: {
     method: string;
@@ -188,6 +192,7 @@ function stableStringify(value: unknown): string {
   const record = value as Record<string, unknown>;
   return `{${Object.keys(record)
     .sort()
+    .filter((key) => record[key] !== undefined)
     .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
     .join(",")}}`;
 }

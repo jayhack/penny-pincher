@@ -1,4 +1,8 @@
-import { postSignedDataRequest } from "./backend.js";
+import {
+  createBillingPortalSession,
+  getBillingUsage,
+  postSignedDataRequest
+} from "./backend.js";
 import { loadConfig } from "./config.js";
 import { createPlaidClient } from "./plaid.js";
 
@@ -85,8 +89,36 @@ export async function getStatus() {
     institutionId: config.institutionId,
     products: config.products,
     countryCodes: config.countryCodes,
+    billingStatus: config.billingStatus,
+    stripeCustomerId: config.stripeCustomerId,
+    stripeSubscriptionId: config.stripeSubscriptionId,
+    billingCurrentPeriodStart: config.billingCurrentPeriodStart,
+    billingCurrentPeriodEnd: config.billingCurrentPeriodEnd,
     updatedAt: config.updatedAt
   };
+}
+
+export async function getUsage() {
+  const config = await hostedBillingConfig();
+  return getBillingUsage(
+    config.backendUrl,
+    {
+      publicKeyPem: config.publicKeyPem
+    },
+    config.privateKeyPem
+  );
+}
+
+export async function createBillingPortal(returnUrl: string) {
+  const config = await hostedBillingConfig();
+  return createBillingPortalSession(
+    config.backendUrl,
+    {
+      publicKeyPem: config.publicKeyPem,
+      returnUrl
+    },
+    config.privateKeyPem
+  );
 }
 
 async function linkedClient() {
@@ -120,4 +152,22 @@ async function hostedRequest<TResult>(path: string, payload: unknown): Promise<T
     privateKeyPem: config.privateKeyPem,
     payload
   });
+}
+
+async function hostedBillingConfig(): Promise<{
+  backendUrl: string;
+  publicKeyPem: string;
+  privateKeyPem: string;
+}> {
+  const config = await loadConfig();
+
+  if (!config.backendUrl || !config.publicKeyPem || !config.privateKeyPem) {
+    throw new Error("Hosted Penny Pincher billing config is incomplete. Run `penny-pincher auth` first.");
+  }
+
+  return {
+    backendUrl: config.backendUrl,
+    publicKeyPem: config.publicKeyPem,
+    privateKeyPem: config.privateKeyPem
+  };
 }

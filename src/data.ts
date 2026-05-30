@@ -108,7 +108,13 @@ export async function getAccountNumbers() {
 
 export async function getHoldings() {
   const context = await linkedContext();
-  const results = await Promise.all(context.items.map((item) => getHoldingsForItem(context.config, item)));
+  const investmentItems = context.items.filter((item) => item.products.includes("investments"));
+
+  if (investmentItems.length === 0) {
+    throw new Error("No linked Plaid item has the investments product. Run `penny-pincher auth --investments` first.");
+  }
+
+  const results = await Promise.all(investmentItems.map((item) => getHoldingsForItem(context.config, item)));
   return mergeHoldings(results);
 }
 

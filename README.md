@@ -74,7 +74,7 @@ PLAID_CLIENT_ID=your-client-id
 PLAID_SECRET=your-secret
 PLAID_SANDBOX_SECRET=your-sandbox-secret
 PLAID_ENV=production
-PLAID_REDIRECT_URI=https://penny-pincher.vercel.app/oauth-return
+PLAID_REDIRECT_URI=https://penny-pincher-cli.vercel.app/oauth-return
 PENNY_PINCHER_ENCRYPTION_KEY=at-least-32-random-bytes
 PENNY_PINCHER_TOKEN_KEY_VERSION=v1
 ```

@@ -1,8 +1,9 @@
 import type { PlaidEnvironment } from "./config.js";
 import { createSignedRequest, type SignedRequest } from "./crypto.js";
 
-export const defaultBackendUrl = "https://penny-pincher.vercel.app";
+export const defaultBackendUrl = "https://penny-pincher-cli.vercel.app";
 const legacyDefaultBackendUrls = new Set([
+  "https://penny-pincher.vercel.app/",
   "http://localhost:3000/",
   "http://127.0.0.1:3000/"
 ]);
@@ -102,17 +103,9 @@ export interface ExchangeResponse {
 
 export async function createHostedLinkToken(
   backendUrl: string,
-  body: LinkTokenRequest,
-  privateKeyPem: string
+  body: LinkTokenRequest
 ): Promise<LinkTokenResponse> {
-  const signed = createSignedRequest({
-    method: "POST",
-    path: "/api/link-token",
-    payload: body,
-    privateKeyPem
-  });
-
-  return postJson(backendUrl, "/api/link-token", signed);
+  return postJson(backendUrl, "/api/link-token", body);
 }
 
 export async function createBillingCheckoutSession(

@@ -66,26 +66,13 @@ async function runHostedAuthFlow(options: AuthOptions): Promise<PennyPincherConf
   const redirectUri = shouldUseHostedRedirectUri(backendUrl)
     ? new URL("/oauth-return", backendUrl).toString()
     : undefined;
-  const billing = await runBillingCheckoutFlow({
-    backendUrl,
-    keyPair,
-    port: options.port,
-    openBrowser: options.openBrowser,
-    onReady: options.onReady
-  });
-
   await saveConfig({
     ...existingConfig,
     mode: "hosted",
     environment: options.environment,
     backendUrl,
     publicKeyPem: keyPair.publicKeyPem,
-    privateKeyPem: keyPair.privateKeyPem,
-    stripeCustomerId: billing.stripeCustomerId,
-    stripeSubscriptionId: billing.stripeSubscriptionId,
-    billingStatus: billing.status,
-    billingCurrentPeriodStart: billing.currentPeriodStart,
-    billingCurrentPeriodEnd: billing.currentPeriodEnd
+    privateKeyPem: keyPair.privateKeyPem
   });
 
   const link = await createHostedLinkToken(backendUrl, {
@@ -94,7 +81,7 @@ async function runHostedAuthFlow(options: AuthOptions): Promise<PennyPincherConf
     products: options.products,
     countryCodes: options.countryCodes,
     redirectUri
-  }, keyPair.privateKeyPem);
+  });
 
   return runLocalLinkFlow({
     ...options,
@@ -124,12 +111,7 @@ async function runHostedAuthFlow(options: AuthOptions): Promise<PennyPincherConf
         institutionName: exchange.institutionName,
         institutionId: exchange.institutionId,
         products: exchange.products,
-        countryCodes: exchange.countryCodes,
-        stripeCustomerId: billing.stripeCustomerId,
-        stripeSubscriptionId: billing.stripeSubscriptionId,
-        billingStatus: billing.status,
-        billingCurrentPeriodStart: billing.currentPeriodStart,
-        billingCurrentPeriodEnd: billing.currentPeriodEnd
+        countryCodes: exchange.countryCodes
       };
 
       await saveConfig(config);

@@ -155,7 +155,7 @@ program
   .addOption(new Option("--no-open", "Deprecated; URLs are printed by default.").hideHelp())
   .addOption(jsonOption())
   .action(async (options) => {
-    const portal = await createBillingPortal("https://penny-pincher.vercel.app/");
+    const portal = await createBillingPortal("https://penny-pincher-cli.vercel.app/");
     if (options.json) {
       printJsonLine({
         ok: true,
@@ -241,13 +241,6 @@ function buildInteractiveChoices(config: PennyPincherConfig): Array<{ name: stri
     );
   }
 
-  if (isHosted(config)) {
-    choices.push(
-      { name: "Show usage and costs", value: ["usage"] },
-      { name: "Manage billing", value: ["billing", "--open"] }
-    );
-  }
-
   choices.push({
     name: isLinked(config) ? "Reconnect bank account" : "Connect bank account",
     value: ["auth", "--open"]
@@ -267,8 +260,6 @@ async function getReadinessReport() {
     linked ? "penny-pincher transactions --days 30" : undefined,
     linked ? "penny-pincher identity" : undefined,
     linked ? "penny-pincher numbers" : undefined,
-    hosted ? "penny-pincher usage" : undefined,
-    hosted ? "penny-pincher billing" : undefined,
     "penny-pincher auth",
     "penny-pincher interactive"
   ].filter((command): command is string => Boolean(command));

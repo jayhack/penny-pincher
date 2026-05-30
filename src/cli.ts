@@ -19,6 +19,7 @@ import {
   getAccountNumbers,
   getAccounts,
   getBalances,
+  getHoldings,
   getIdentity,
   getStatus,
   getTransactions,
@@ -42,7 +43,7 @@ class CliError extends Error {
 
 program
   .name("penny-pincher")
-  .description("Agent-friendly CLI for reading bank data through Plaid.")
+  .description("Agent-friendly CLI for reading bank and investment data through Plaid.")
   .version(cliVersion);
 
 program.configureOutput({
@@ -55,9 +56,10 @@ program.configureOutput({
 
 program
   .command("auth")
-  .description("Connect a bank account with Plaid Link and save local token metadata.")
+  .description("Connect a bank or investment account with Plaid Link and save local token metadata.")
   .addOption(environmentOption())
   .option("-p, --products <products>", "Comma-separated Plaid products to request.", "transactions")
+  .option("--investments", "Request only the Plaid investments product unless --products is also set.")
   .option("-c, --country-codes <codes>", "Comma-separated country codes.", "US")
   .option("--port <port>", "Local auth server port.", parsePort, 7777)
   .option(
@@ -69,12 +71,16 @@ program
   .addOption(new Option("--open", "Open browser URLs automatically. By default URLs are printed for agent handoff.").default(false))
   .addOption(new Option("--no-open", "Deprecated; URLs are printed by default.").hideHelp())
   .addOption(jsonOption())
-  .action(async (options) => {
+  .action(async (options, command) => {
     const emitEvent = createAuthEventEmitter(Boolean(options.json));
     const environment = resolveEnvironment(options.env);
     const config = await runAuthFlow({
       environment,
-      products: splitList(options.products),
+      products: resolveAuthProducts(
+        options.products,
+        Boolean(options.investments),
+        command.getOptionValueSource("products") === "cli"
+      ),
       countryCodes: splitList(options.countryCodes),
       port: options.port,
       openBrowser: Boolean(options.open),
@@ -96,7 +102,7 @@ program
       return;
     }
 
-    console.error(chalk.green(`Linked ${config.institutionName ?? "bank account"} in ${config.environment}.`));
+    console.error(chalk.green(`Linked ${config.institutionName ?? "account"} in ${config.environment}.`));
     console.error(chalk.dim(`Saved token metadata to ${configPath}`));
   });
 
@@ -137,6 +143,13 @@ program
   .description("Print ACH account/routing numbers. Requires the Plaid auth product.")
   .addOption(jsonOption())
   .action(async () => printJson(await getAccountNumbers()));
+
+program
+  .command("holdings")
+  .alias("investments")
+  .description("Print investment holdings and securities. Requires the Plaid investments product.")
+  .addOption(jsonOption())
+  .action(async () => printJson(await getHoldings()));
 
 program
   .command("status")
@@ -245,7 +258,8 @@ function buildInteractiveChoices(config: PennyPincherConfig): Array<{ name: stri
     choices.push(
       { name: "Show accounts", value: ["accounts"] },
       { name: "Show balances", value: ["balances"] },
-      { name: "Show recent transactions", value: ["transactions"] }
+      { name: "Show recent transactions", value: ["transactions"] },
+      { name: "Show investment holdings", value: ["holdings"] }
     );
   }
 
@@ -267,7 +281,9 @@ async function getReadinessReport() {
     linked ? "penny-pincher transactions --days 30" : undefined,
     linked ? "penny-pincher identity" : undefined,
     linked ? "penny-pincher numbers" : undefined,
+    linked ? "penny-pincher holdings" : undefined,
     "penny-pincher auth",
+    "penny-pincher auth --investments",
     "penny-pincher interactive"
   ].filter((command): command is string => Boolean(command));
 
@@ -317,6 +333,19 @@ function splitList(value: string): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function resolveAuthProducts(value: string, investments: boolean, productsFromCli: boolean): string[] {
+  if (investments && !productsFromCli) {
+    return ["investments"];
+  }
+
+  const products = splitList(value);
+  if (!investments || products.includes("investments")) {
+    return products;
+  }
+
+  return [...products, "investments"];
 }
 
 function resolveEnvironment(value: string | undefined) {

@@ -50,7 +50,7 @@ const plaidHosts: Record<PlaidEnvironment, string> = {
   production: PlaidEnvironments.production
 };
 
-export type DataKind = "accounts" | "balances" | "transactions" | "identity" | "numbers";
+export type DataKind = "accounts" | "balances" | "transactions" | "identity" | "numbers" | "holdings";
 
 export async function linkTokenHandler(request: VercelRequest, response: VercelResponse): Promise<void> {
   await withJsonPost(request, response, async () => {
@@ -187,6 +187,11 @@ async function callPlaidDataEndpoint(
   if (kind === "identity") {
     const response = await client.identityGet({ access_token: accessToken });
     return response.data.accounts;
+  }
+
+  if (kind === "holdings") {
+    const response = await client.investmentsHoldingsGet({ access_token: accessToken });
+    return response.data;
   }
 
   const response = await client.authGet({ access_token: accessToken });

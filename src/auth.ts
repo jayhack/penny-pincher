@@ -362,7 +362,7 @@ async function runLocalLinkFlow(options: AuthOptions & {
     type: "plaid_link_url",
     url,
     requiresHuman: true,
-    message: "Open this Plaid Link URL to connect a bank account."
+    message: "Open this Plaid Link URL to connect an account."
   });
 
   if (options.openBrowser) {
@@ -602,7 +602,7 @@ function renderLinkPage(linkToken: string): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Penny-Pincher · Connect bank</title>
+    <title>Penny-Pincher · Connect account</title>
     ${FONT_LINKS}
     <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
     <style>${SHARED_AUTH_STYLES}</style>
@@ -624,7 +624,7 @@ function renderLinkPage(linkToken: string): string {
         <h1 class="display-lift">CONNECT</h1>
         <p class="lede">
           Plaid Link should open in a moment.
-          <span class="dim">Pick a bank, sign in, and the CLI will pick up the token automatically. You can close this tab when it's done.</span>
+          <span class="dim">Pick an institution, sign in, and the CLI will pick up the token automatically. You can close this tab when it's done.</span>
         </p>
         <div class="actions">
           <button type="button" id="open" class="btn-primary">Open Plaid Link →</button>

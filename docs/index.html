@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Penny Pincher</title>
-    <meta name="description" content="Agent-friendly CLI for connecting to bank data through Plaid." />
+    <meta name="description" content="Agent-friendly CLI for connecting to bank and investment data through Plaid." />
     <style>
       :root {
         color-scheme: light dark;
@@ -62,12 +62,13 @@
   <body>
     <main>
       <h1>Penny Pincher</h1>
-      <p class="lede">A tiny CLI that lets an agent read your bank account data through Plaid, using a stateless hosted broker and JSON-first commands.</p>
+      <p class="lede">A tiny CLI that lets an agent read your bank and investment account data through Plaid, using a stateless hosted broker and JSON-first commands.</p>
 
       <pre><code>npx penny-pincher auth
 npx penny-pincher accounts
 npx penny-pincher balances
-npx penny-pincher transactions --days 30</code></pre>
+npx penny-pincher transactions --days 30
+npx penny-pincher holdings</code></pre>
 
       <h2>How It Works</h2>
       <div class="grid">
@@ -77,7 +78,7 @@ npx penny-pincher transactions --days 30</code></pre>
         </section>
         <section class="card">
           <h3>2. Query</h3>
-          <p>Run commands like <code>balances</code> or <code>transactions</code>. The CLI signs each request and prints JSON for agents and scripts.</p>
+          <p>Run commands like <code>balances</code>, <code>transactions</code>, or <code>holdings</code>. The CLI signs each request and prints JSON for agents and scripts.</p>
         </section>
         <section class="card">
           <h3>3. Stay Local</h3>
@@ -103,6 +104,8 @@ npx penny-pincher auth</code></pre>
 penny-pincher accounts
 penny-pincher balances
 penny-pincher transactions --start 2026-04-01 --end 2026-05-01
+penny-pincher auth --investments
+penny-pincher holdings
 penny-pincher identity
 penny-pincher numbers
 penny-pincher status

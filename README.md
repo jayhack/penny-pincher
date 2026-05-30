@@ -4,7 +4,7 @@
   <img src="public/og-image.png" alt="Penny Pincher — OSS personal finance CLI. npx penny-pincher" width="720" />
 </p>
 
-Penny Pincher is an agent-friendly CLI for connecting a bank account with Plaid and reading account data as JSON.
+Penny Pincher is an agent-friendly CLI for connecting bank and investment accounts with Plaid and reading account data as JSON.
 
 ```sh
 npx -p penny-pincher penny-pincher
@@ -12,6 +12,7 @@ npx -p penny-pincher penny-pincher auth
 npx -p penny-pincher penny-pincher accounts
 npx -p penny-pincher penny-pincher balances
 npx -p penny-pincher penny-pincher transactions --days 30
+npx -p penny-pincher penny-pincher holdings
 ```
 
 Running `penny-pincher` with no command prints a JSON readiness report with the next command to run. It does not open an interactive menu by default.
@@ -29,6 +30,19 @@ The CLI prints any required Stripe Checkout or Plaid Link URLs so an agent can h
 The backend creates Plaid Link tokens, exchanges public tokens, and proxies Plaid data requests. The CLI stores encrypted token envelopes and a local signing key at `~/.penny-pincher/config.json`.
 
 Run `auth` again to link another institution. Data commands query every linked item, so Chase and Mercury can sit side by side in the same local config.
+
+To link a brokerage account such as Robinhood for holdings, request Plaid Investments:
+
+```sh
+npx -p penny-pincher penny-pincher auth --investments
+npx -p penny-pincher penny-pincher holdings
+```
+
+If one institution should be linked for both normal transactions and investments, pass both products explicitly:
+
+```sh
+npx -p penny-pincher penny-pincher auth --products transactions,investments
+```
 
 If you deploy your own backend, point the CLI at it:
 
@@ -51,6 +65,7 @@ npx -p penny-pincher penny-pincher auth --env sandbox
 - `penny-pincher transactions --days 30` prints recent transactions.
 - `penny-pincher identity` prints account owner identity data when the product is enabled.
 - `penny-pincher numbers` prints ACH/routing data when the Plaid `auth` product is enabled.
+- `penny-pincher holdings` prints investment holdings, securities, and enriched position rows when the Plaid `investments` product is enabled.
 - `penny-pincher status` prints local connection metadata, readiness, and the next command without exposing secrets.
 - `penny-pincher doctor` prints the same machine-readable readiness report as `status`.
 - `penny-pincher usage` prints current billing-period usage and estimated costs.
@@ -96,6 +111,7 @@ The Vercel API exposes:
 - `POST /api/transactions`
 - `POST /api/identity`
 - `POST /api/numbers`
+- `POST /api/holdings`
 
 ## Bring Your Own Plaid App
 

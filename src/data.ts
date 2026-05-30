@@ -25,6 +25,23 @@ interface AccountNumbersResult {
   numbers: Record<string, unknown>;
 }
 
+interface HoldingsResult {
+  source: LinkedItemSource;
+  accounts: JsonRecord[];
+  holdings: JsonRecord[];
+  securities: JsonRecord[];
+  item?: unknown;
+  requestId?: string;
+}
+
+interface LinkedItemSource {
+  mode: LinkedAccountItem["mode"];
+  environment: LinkedAccountItem["environment"];
+  itemId?: string;
+  institutionName?: string;
+  institutionId?: string;
+}
+
 export async function getAccounts() {
   const context = await linkedContext();
   const results = await Promise.all(context.items.map((item) => getAccountsForItem(context.config, item)));
@@ -62,6 +79,12 @@ export async function getAccountNumbers() {
   const context = await linkedContext();
   const results = await Promise.all(context.items.map((item) => getAccountNumbersForItem(context.config, item)));
   return mergeAccountNumbers(results);
+}
+
+export async function getHoldings() {
+  const context = await linkedContext();
+  const results = await Promise.all(context.items.map((item) => getHoldingsForItem(context.config, item)));
+  return mergeHoldings(results);
 }
 
 export async function getStatus() {
@@ -201,6 +224,17 @@ async function getAccountNumbersForItem(
   };
 }
 
+async function getHoldingsForItem(config: PennyPincherConfig, item: LinkedAccountItem): Promise<HoldingsResult> {
+  if (item.mode === "hosted") {
+    const result = await hostedRequest<unknown>(config, item, "holdings", {});
+    return normalizeHoldingsResult(result, item);
+  }
+
+  const client = createPlaidClient(item.environment);
+  const response = await client.investmentsHoldingsGet({ access_token: directAccessToken(item) });
+  return normalizeHoldingsResult(response.data, item);
+}
+
 function hostedRequest<TResult>(
   config: PennyPincherConfig,
   item: LinkedAccountItem,
@@ -290,6 +324,31 @@ function normalizeAccountNumbersResult(result: unknown): AccountNumbersResult {
   };
 }
 
+function normalizeHoldingsResult(result: unknown, item: LinkedAccountItem): HoldingsResult {
+  const value = result as {
+    accounts?: unknown;
+    holdings?: unknown;
+    securities?: unknown;
+    item?: unknown;
+    request_id?: unknown;
+    requestId?: unknown;
+  };
+
+  return {
+    source: linkedItemSource(item),
+    accounts: asRecords(value.accounts),
+    holdings: asRecords(value.holdings),
+    securities: asRecords(value.securities),
+    item: value.item,
+    requestId:
+      typeof value.request_id === "string"
+        ? value.request_id
+        : typeof value.requestId === "string"
+          ? value.requestId
+          : undefined
+  };
+}
+
 function mergeAccountNumbers(results: AccountNumbersResult[]): AccountNumbersResult {
   const numbers: Record<string, unknown> = {};
 
@@ -310,6 +369,68 @@ function mergeAccountNumbers(results: AccountNumbersResult[]): AccountNumbersRes
   };
 }
 
+function mergeHoldings(results: HoldingsResult[]) {
+  const positions = results
+    .flatMap((result) => buildPositions(result))
+    .sort((left, right) => numericValue(right.institutionValue) - numericValue(left.institutionValue));
+
+  return {
+    accounts: results.flatMap((result) => result.accounts),
+    holdings: results.flatMap((result) => result.holdings),
+    securities: results.flatMap((result) => result.securities),
+    positions,
+    items: results.map((result) => ({
+      ...result.source,
+      accountCount: result.accounts.length,
+      holdingCount: result.holdings.length,
+      securityCount: result.securities.length,
+      item: result.item,
+      requestId: result.requestId
+    }))
+  };
+}
+
+function buildPositions(result: HoldingsResult): JsonRecord[] {
+  const accountsById = indexById(result.accounts, "account_id");
+  const securitiesById = indexById(result.securities, "security_id");
+
+  return result.holdings.map((holding) => {
+    const accountId = stringProp(holding, "account_id");
+    const securityId = stringProp(holding, "security_id");
+    const account = accountId ? accountsById.get(accountId) : undefined;
+    const security = securityId ? securitiesById.get(securityId) : undefined;
+
+    return compactRecord({
+      institutionName: result.source.institutionName,
+      institutionId: result.source.institutionId,
+      itemId: result.source.itemId,
+      accountId,
+      accountName: account ? stringProp(account, "name") : undefined,
+      accountMask: account ? stringProp(account, "mask") : undefined,
+      accountType: account?.type,
+      accountSubtype: account?.subtype,
+      securityId,
+      securityName: security ? stringProp(security, "name") : undefined,
+      tickerSymbol: security ? stringProp(security, "ticker_symbol") : undefined,
+      securityType: security?.type,
+      securitySubtype: security?.subtype,
+      quantity: holding.quantity,
+      institutionValue: holding.institution_value,
+      institutionPrice: holding.institution_price,
+      institutionPriceAsOf: holding.institution_price_as_of,
+      costBasis: holding.cost_basis,
+      currencyCode:
+        stringProp(holding, "iso_currency_code")
+        ?? (security ? stringProp(security, "iso_currency_code") : undefined)
+        ?? stringProp(holding, "unofficial_currency_code")
+        ?? (security ? stringProp(security, "unofficial_currency_code") : undefined),
+      holding,
+      security,
+      account
+    });
+  });
+}
+
 function transactionDate(transaction: JsonRecord): string {
   if (typeof transaction.date === "string") {
     return transaction.date;
@@ -324,4 +445,39 @@ function transactionDate(transaction: JsonRecord): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asRecords(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function linkedItemSource(item: LinkedAccountItem): LinkedItemSource {
+  return {
+    mode: item.mode,
+    environment: item.environment,
+    itemId: item.itemId,
+    institutionName: item.institutionName,
+    institutionId: item.institutionId
+  };
+}
+
+function indexById(records: JsonRecord[], key: string): Map<string, JsonRecord> {
+  return new Map(
+    records
+      .map((record) => [stringProp(record, key), record] as const)
+      .filter((entry): entry is readonly [string, JsonRecord] => Boolean(entry[0]))
+  );
+}
+
+function stringProp(record: JsonRecord, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function numericValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function compactRecord(record: JsonRecord): JsonRecord {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
 }

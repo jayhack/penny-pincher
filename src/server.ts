@@ -43,6 +43,9 @@ const transactionsPayloadSchema = z.object({
   endDate: z.string(),
   count: z.number().int().positive().max(500).default(100)
 });
+const recurringPayloadSchema = z.object({
+  accountIds: z.array(z.string()).optional()
+});
 
 const plaidHosts: Record<PlaidEnvironment, string> = {
   sandbox: PlaidEnvironments.sandbox,
@@ -50,7 +53,7 @@ const plaidHosts: Record<PlaidEnvironment, string> = {
   production: PlaidEnvironments.production
 };
 
-export type DataKind = "accounts" | "balances" | "transactions" | "identity" | "numbers" | "holdings";
+export type DataKind = "accounts" | "balances" | "transactions" | "recurring" | "identity" | "numbers" | "holdings";
 
 export async function linkTokenHandler(request: VercelRequest, response: VercelResponse): Promise<void> {
   await withJsonPost(request, response, async () => {
@@ -181,6 +184,22 @@ async function callPlaidDataEndpoint(
       accounts: response.data.accounts,
       transactions: response.data.transactions,
       totalTransactions: response.data.total_transactions
+    };
+  }
+
+  if (kind === "recurring") {
+    const options = recurringPayloadSchema.parse(payload);
+    const response = await client.transactionsRecurringGet({
+      access_token: accessToken,
+      account_ids: options.accountIds
+    });
+
+    return {
+      inflowStreams: response.data.inflow_streams,
+      outflowStreams: response.data.outflow_streams,
+      updatedDatetime: response.data.updated_datetime,
+      personalFinanceCategoryVersion: response.data.personal_finance_category_version,
+      requestId: response.data.request_id
     };
   }
 

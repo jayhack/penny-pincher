@@ -1,9 +1,9 @@
 {
   "name": "penny-pincher",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Agent-friendly CLI for reading bank data through Plaid.",
   "type": "module",
-  "homepage": "https://penny-pincher-cli.vercel.app/",
+  "homepage": "https://penny-pincher.vercel.app/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jayhack/penny-pincher.git"
@@ -12,7 +12,7 @@
     "url": "https://github.com/jayhack/penny-pincher/issues"
   },
   "bin": {
-    "penny-pincher": "./dist/cli.js"
+    "penny-pincher": "dist/cli.js"
   },
   "files": [
     "dist",

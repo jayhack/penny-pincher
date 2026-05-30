@@ -20,6 +20,11 @@ const configSchema = z.object({
   institutionId: z.string().optional(),
   products: z.array(z.string()).default(["transactions"]),
   countryCodes: z.array(z.string()).default(["US"]),
+  stripeCustomerId: z.string().optional(),
+  stripeSubscriptionId: z.string().optional(),
+  billingStatus: z.string().optional(),
+  billingCurrentPeriodStart: z.string().optional(),
+  billingCurrentPeriodEnd: z.string().optional(),
   updatedAt: z.string().optional()
 });
 
@@ -74,8 +79,6 @@ export async function clearLinkedAccount(): Promise<void> {
   const {
     accessToken,
     tokenEnvelope,
-    publicKeyPem,
-    privateKeyPem,
     itemId,
     institutionName,
     institutionId,
@@ -83,8 +86,6 @@ export async function clearLinkedAccount(): Promise<void> {
   } = config;
   void accessToken;
   void tokenEnvelope;
-  void publicKeyPem;
-  void privateKeyPem;
   void itemId;
   void institutionName;
   void institutionId;

@@ -7,11 +7,14 @@
 Penny Pincher is an agent-friendly CLI for connecting a bank account with Plaid and reading account data as JSON.
 
 ```sh
+npx -p penny-pincher penny-pincher
 npx -p penny-pincher penny-pincher auth
 npx -p penny-pincher penny-pincher accounts
 npx -p penny-pincher penny-pincher balances
 npx -p penny-pincher penny-pincher transactions --days 30
 ```
+
+Running `penny-pincher` with no command prints a JSON readiness report with the next command to run. It does not open an interactive menu by default.
 
 ## Setup
 
@@ -20,6 +23,8 @@ The default CLI flow uses the hosted Penny Pincher backend:
 ```sh
 npx -p penny-pincher penny-pincher auth
 ```
+
+The CLI prints any required Stripe Checkout or Plaid Link URLs so an agent can hand the URL to a human. Pass `--open` when a human is driving the terminal and you want the browser to open automatically.
 
 The backend creates Plaid Link tokens, exchanges public tokens, and proxies Plaid data requests. The CLI stores an encrypted token envelope and a local signing key at `~/.penny-pincher/config.json`.
 
@@ -44,10 +49,15 @@ npx -p penny-pincher penny-pincher auth --env sandbox
 - `penny-pincher transactions --days 30` prints recent transactions.
 - `penny-pincher identity` prints account owner identity data when the product is enabled.
 - `penny-pincher numbers` prints ACH/routing data when the Plaid `auth` product is enabled.
-- `penny-pincher status` prints local connection metadata without exposing the access token.
+- `penny-pincher status` prints local connection metadata, readiness, and the next command without exposing secrets.
+- `penny-pincher doctor` prints the same machine-readable readiness report as `status`.
+- `penny-pincher usage` prints current billing-period usage and estimated costs.
+- `penny-pincher billing` prints a Stripe Customer Portal URL.
+- `penny-pincher interactive` opens the human-oriented menu.
 - `penny-pincher logout` removes the saved local token.
 
 All data commands print JSON so another agent or script can parse them directly.
+Commands accept `--json` where they have non-data output. Error responses also become machine-readable when `--json` is present.
 
 ## Security Notes
 
@@ -64,7 +74,7 @@ PLAID_CLIENT_ID=your-client-id
 PLAID_SECRET=your-secret
 PLAID_SANDBOX_SECRET=your-sandbox-secret
 PLAID_ENV=production
-PLAID_REDIRECT_URI=https://penny-pincher-cli.vercel.app/oauth-return
+PLAID_REDIRECT_URI=https://penny-pincher.vercel.app/oauth-return
 PENNY_PINCHER_ENCRYPTION_KEY=at-least-32-random-bytes
 PENNY_PINCHER_TOKEN_KEY_VERSION=v1
 ```

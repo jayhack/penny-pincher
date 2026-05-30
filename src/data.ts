@@ -2,7 +2,9 @@ import { createBillingPortalSession, getBillingUsage, postSignedDataRequest, res
 import {
   getLinkedItems,
   loadConfig,
+  selectLinkedAccountItem,
   type LinkedAccountItem,
+  type LinkedAccountRemovalSelector,
   type PennyPincherConfig
 } from "./config.js";
 import { createPlaidClient } from "./plaid.js";
@@ -108,6 +110,19 @@ export async function getHoldings() {
   const context = await linkedContext();
   const results = await Promise.all(context.items.map((item) => getHoldingsForItem(context.config, item)));
   return mergeHoldings(results);
+}
+
+export async function getItemInfo(selector?: LinkedAccountRemovalSelector) {
+  const context = await linkedContext();
+  const items = selector && hasItemSelector(selector)
+    ? [selectLinkedAccountItem(context.config, selector).item]
+    : context.items;
+  const results = await Promise.all(items.map((item) => getItemInfoForItem(context.config, item)));
+
+  return {
+    itemCount: results.length,
+    items: results
+  };
 }
 
 export async function getStatus() {
@@ -280,6 +295,20 @@ async function getHoldingsForItem(config: PennyPincherConfig, item: LinkedAccoun
   const client = createPlaidClient(item.environment);
   const response = await client.investmentsHoldingsGet({ access_token: directAccessToken(item) });
   return normalizeHoldingsResult(response.data, item);
+}
+
+async function getItemInfoForItem(config: PennyPincherConfig, item: LinkedAccountItem) {
+  const result = item.mode === "hosted"
+    ? await hostedRequest<unknown>(config, item, "item", {})
+    : (await createPlaidClient(item.environment).itemGet({ access_token: directAccessToken(item) })).data;
+  const value = isRecord(result) ? result : {};
+
+  return {
+    source: linkedItemSource(item),
+    item: value.item,
+    status: value.status,
+    requestId: value.request_id ?? value.requestId
+  };
 }
 
 function hostedRequest<TResult>(
@@ -577,4 +606,8 @@ function compactRecord(record: JsonRecord): JsonRecord {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function hasItemSelector(selector: LinkedAccountRemovalSelector): boolean {
+  return selector.itemId !== undefined || selector.institutionName !== undefined || selector.index !== undefined;
 }

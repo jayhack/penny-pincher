@@ -110,7 +110,7 @@ export async function removeLinkedAccountItem(
 ): Promise<{ removed: LinkedAccountItem; remaining: LinkedAccountItem[] }> {
   const config = await loadConfig();
   const items = getLinkedItems(config);
-  const removalIndex = findRemovalIndex(items, selector);
+  const removalIndex = findLinkedItemIndex(items, selector);
   const removed = items[removalIndex];
   const remaining = items.filter((_, index) => index !== removalIndex);
 
@@ -120,6 +120,19 @@ export async function removeLinkedAccountItem(
   });
 
   return { removed, remaining };
+}
+
+export function selectLinkedAccountItem(
+  config: PennyPincherConfig,
+  selector: LinkedAccountRemovalSelector
+): { item: LinkedAccountItem; index: number; items: LinkedAccountItem[] } {
+  const items = getLinkedItems(config);
+  const index = findLinkedItemIndex(items, selector);
+  return {
+    item: items[index],
+    index,
+    items
+  };
 }
 
 export function getLinkedItems(config: PennyPincherConfig): LinkedAccountItem[] {
@@ -179,7 +192,7 @@ function isMissingFileError(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
-function findRemovalIndex(items: LinkedAccountItem[], selector: LinkedAccountRemovalSelector): number {
+function findLinkedItemIndex(items: LinkedAccountItem[], selector: LinkedAccountRemovalSelector): number {
   if (items.length === 0) {
     throw new Error("No linked Plaid item found. Run `penny-pincher auth` first.");
   }

@@ -5,6 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   createBillingCheckoutSession,
   createHostedLinkToken,
+  createHostedUpdateLinkToken,
   defaultBackendUrl,
   exchangeHostedPublicToken,
   getBillingStatus,
@@ -16,6 +17,7 @@ import {
   loadConfig,
   type PlaidEnvironment,
   saveConfig,
+  selectLinkedAccountItem,
   upsertLinkedItem
 } from "./config.js";
 import { generateSigningKeyPair } from "./crypto.js";
@@ -29,6 +31,12 @@ export interface AuthOptions {
   openBrowser: boolean;
   directPlaid: boolean;
   backendUrl?: string;
+  linkCustomizationName?: string;
+  update?: {
+    itemId?: string;
+    institutionName?: string;
+    index?: number;
+  };
   onReady?: (event: AuthReadyEvent) => void;
 }
 
@@ -47,11 +55,23 @@ interface LinkMetadata {
 }
 
 export async function runAuthFlow(options: AuthOptions): Promise<PennyPincherConfig> {
+  if (options.update) {
+    return runUpdateAuthFlow(options);
+  }
+
   if (!options.directPlaid) {
     return runHostedAuthFlow(options);
   }
 
   return runDirectAuthFlow(options);
+}
+
+async function runUpdateAuthFlow(options: AuthOptions): Promise<PennyPincherConfig> {
+  if (!options.directPlaid) {
+    return runHostedUpdateAuthFlow(options);
+  }
+
+  return runDirectUpdateAuthFlow(options);
 }
 
 async function runHostedAuthFlow(options: AuthOptions): Promise<PennyPincherConfig> {
@@ -87,7 +107,8 @@ async function runHostedAuthFlow(options: AuthOptions): Promise<PennyPincherConf
     environment: options.environment,
     products: options.products,
     countryCodes: options.countryCodes,
-    redirectUri
+    redirectUri,
+    linkCustomizationName: options.linkCustomizationName
   });
 
   return runLocalLinkFlow({
@@ -123,6 +144,51 @@ async function runHostedAuthFlow(options: AuthOptions): Promise<PennyPincherConf
       await saveConfig(config);
       return config;
     }
+  });
+}
+
+async function runHostedUpdateAuthFlow(options: AuthOptions): Promise<PennyPincherConfig> {
+  const existingConfig = await loadConfig();
+  const selected = selectLinkedAccountItem(existingConfig, {
+    itemId: options.update?.itemId,
+    institutionName: options.update?.institutionName,
+    index: options.update?.index
+  });
+
+  if (!existingConfig.publicKeyPem || !existingConfig.privateKeyPem || !selected.item.tokenEnvelope) {
+    throw new Error("Hosted Penny Pincher config is incomplete for update mode. Run `penny-pincher auth` again.");
+  }
+
+  const backendUrl = normalizeBackendUrl(
+    selected.item.backendUrl
+      ?? existingConfig.backendUrl
+      ?? options.backendUrl
+      ?? process.env.PENNY_PINCHER_API_URL
+      ?? process.env.PENNY_PINCER_API_URL
+      ?? process.env.FINCLAW_API_URL
+      ?? defaultBackendUrl
+  );
+  const redirectUri = shouldUseHostedRedirectUri(backendUrl)
+    ? new URL("/oauth-return", backendUrl).toString()
+    : undefined;
+  const link = await createHostedUpdateLinkToken(
+    backendUrl,
+    selected.item.tokenEnvelope,
+    {
+      publicKeyPem: existingConfig.publicKeyPem,
+      additionalConsentedProducts: options.products,
+      countryCodes: selected.item.countryCodes.length > 0 ? selected.item.countryCodes : options.countryCodes,
+      redirectUri,
+      linkCustomizationName: options.linkCustomizationName
+    },
+    existingConfig.privateKeyPem
+  );
+
+  return runLocalLinkFlow({
+    ...options,
+    hostedLinkUrl: createHostedLinkUrl(backendUrl, link.linkToken, options.port),
+    linkToken: link.linkToken,
+    complete: async (metadata) => saveUpdatedLinkedItemProducts(selected.item, options.products, metadata)
   });
 }
 
@@ -256,7 +322,8 @@ async function runDirectAuthFlow(options: AuthOptions): Promise<PennyPincherConf
     products: options.products as never,
     country_codes: options.countryCodes as never,
     language: "en",
-    redirect_uri: redirectUri
+    redirect_uri: redirectUri,
+    link_customization_name: options.linkCustomizationName
   });
 
   const linkToken = linkTokenResponse.data.link_token;
@@ -286,10 +353,45 @@ async function runDirectAuthFlow(options: AuthOptions): Promise<PennyPincherConf
   });
 }
 
+async function runDirectUpdateAuthFlow(options: AuthOptions): Promise<PennyPincherConfig> {
+  const existingConfig = await loadConfig();
+  const selected = selectLinkedAccountItem(existingConfig, {
+    itemId: options.update?.itemId,
+    institutionName: options.update?.institutionName,
+    index: options.update?.index
+  });
+
+  if (!selected.item.accessToken) {
+    throw new Error(`Direct Plaid config is incomplete for ${selected.item.institutionName ?? selected.item.itemId ?? "linked item"}.`);
+  }
+
+  const client = createPlaidClient(selected.item.environment);
+  const redirectUri = process.env.PLAID_REDIRECT_URI;
+  const linkTokenResponse = await client.linkTokenCreate({
+    user: {
+      client_user_id: `penny-pincher-${selected.item.itemId ?? Date.now()}`
+    },
+    client_name: "Penny Pincher",
+    country_codes: (selected.item.countryCodes.length > 0 ? selected.item.countryCodes : options.countryCodes) as never,
+    language: "en",
+    access_token: selected.item.accessToken,
+    additional_consented_products: options.products as never,
+    redirect_uri: redirectUri,
+    link_customization_name: options.linkCustomizationName
+  });
+
+  return runLocalLinkFlow({
+    ...options,
+    linkToken: linkTokenResponse.data.link_token,
+    complete: async (metadata) => saveUpdatedLinkedItemProducts(selected.item, options.products, metadata)
+  });
+}
+
 async function runLocalLinkFlow(options: AuthOptions & {
   linkToken: string;
   hostedLinkUrl?: string;
-  exchange: (publicToken: string, metadata: LinkMetadata | undefined) => Promise<PennyPincherConfig>;
+  exchange?: (publicToken: string, metadata: LinkMetadata | undefined) => Promise<PennyPincherConfig>;
+  complete?: (metadata: LinkMetadata | undefined) => Promise<PennyPincherConfig>;
 }): Promise<PennyPincherConfig> {
   const app = express();
   app.use(express.json());
@@ -329,7 +431,21 @@ async function runLocalLinkFlow(options: AuthOptions & {
         const publicToken = request.body?.public_token;
         const metadata = request.body?.metadata as LinkMetadata | undefined;
 
-        if (!publicToken || typeof publicToken !== "string") {
+        if (options.complete) {
+          const config = await options.complete(metadata);
+          response.json({
+            ok: true,
+            configPath: "~/.penny-pincher/config.json",
+            institutionName: config.institutionName,
+            environment: config.environment,
+            mode: config.mode
+          });
+          clearTimeout(timeout);
+          resolve(config);
+          return;
+        }
+
+        if (!publicToken || typeof publicToken !== "string" || !options.exchange) {
           response.status(400).json({ error: "Missing public_token" });
           return;
         }
@@ -370,6 +486,27 @@ async function runLocalLinkFlow(options: AuthOptions & {
   }
 
   return finished;
+}
+
+async function saveUpdatedLinkedItemProducts(
+  item: LinkedAccountItem,
+  products: string[],
+  metadata: LinkMetadata | undefined
+): Promise<PennyPincherConfig> {
+  const nextItem: LinkedAccountItem = {
+    ...item,
+    institutionName: metadata?.institution?.name ?? item.institutionName,
+    institutionId: metadata?.institution?.institution_id ?? item.institutionId,
+    products: mergeLists(item.products, products)
+  };
+  const config = upsertLinkedItem(await loadConfig(), nextItem);
+
+  await saveConfig(config);
+  return config;
+}
+
+function mergeLists(left: string[], right: string[]): string[] {
+  return [...new Set([...left, ...right])];
 }
 
 function createHostedLinkUrl(backendUrl: string, linkToken: string, port: number): string {

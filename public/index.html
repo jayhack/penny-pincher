@@ -615,6 +615,10 @@
             <div class="desc">Connect a brokerage such as Robinhood with the Plaid <code class="mono">investments</code> product.</div>
           </div>
           <div class="cmd-row">
+            <div class="cmd">penny-pincher auth --update --investments --institution Robinhood</div>
+            <div class="desc">Use Plaid update mode to add Investments consent to an existing linked Item.</div>
+          </div>
+          <div class="cmd-row">
             <div class="cmd">penny-pincher accounts</div>
             <div class="desc">Print linked accounts.</div>
           </div>
@@ -641,6 +645,10 @@
           <div class="cmd-row">
             <div class="cmd">penny-pincher holdings</div>
             <div class="desc">Print investment holdings, securities, and enriched position rows when the Plaid <code class="mono">investments</code> product is enabled.</div>
+          </div>
+          <div class="cmd-row">
+            <div class="cmd">penny-pincher item --institution Robinhood</div>
+            <div class="desc">Print Plaid Item metadata, including consented and billed products when Plaid returns them.</div>
           </div>
           <div class="cmd-row">
             <div class="cmd">penny-pincher status</div>

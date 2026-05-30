@@ -26,7 +26,16 @@ const linkTokenSchema = z.object({
   environment: z.string().optional(),
   products: z.array(z.string()).default(["transactions"]),
   countryCodes: z.array(z.string()).default(["US"]),
-  redirectUri: z.string().url().optional()
+  redirectUri: z.string().url().optional(),
+  linkCustomizationName: z.string().min(1).optional()
+});
+
+const updateLinkTokenPayloadSchema = z.object({
+  publicKeyPem: z.string().min(1),
+  additionalConsentedProducts: z.array(z.string()).min(1),
+  countryCodes: z.array(z.string()).default(["US"]),
+  redirectUri: z.string().url().optional(),
+  linkCustomizationName: z.string().min(1).optional()
 });
 
 const exchangePayloadSchema = z.object({
@@ -53,7 +62,7 @@ const plaidHosts: Record<PlaidEnvironment, string> = {
   production: PlaidEnvironments.production
 };
 
-export type DataKind = "accounts" | "balances" | "transactions" | "recurring" | "identity" | "numbers" | "holdings";
+export type DataKind = "accounts" | "balances" | "transactions" | "recurring" | "identity" | "numbers" | "holdings" | "item";
 
 export async function linkTokenHandler(request: VercelRequest, response: VercelResponse): Promise<void> {
   await withJsonPost(request, response, async () => {
@@ -68,12 +77,57 @@ export async function linkTokenHandler(request: VercelRequest, response: VercelR
       products: body.products as never,
       country_codes: body.countryCodes as never,
       language: "en",
-      redirect_uri: body.redirectUri ?? process.env.PLAID_REDIRECT_URI
+      redirect_uri: body.redirectUri ?? process.env.PLAID_REDIRECT_URI,
+      link_customization_name: body.linkCustomizationName ?? process.env.PLAID_LINK_CUSTOMIZATION_NAME
     });
 
     response.status(200).json({
       linkToken: link.data.link_token,
       environment
+    });
+  });
+}
+
+export async function updateLinkTokenHandler(request: VercelRequest, response: VercelResponse): Promise<void> {
+  await withJsonPost(request, response, async () => {
+    const body = dataRequestSchema.parse(request.body);
+    const envelope = decryptTokenEnvelope(body.tokenEnvelope, getEnvelopeSecret());
+    const signed = {
+      payload: body.payload,
+      timestamp: body.timestamp,
+      nonce: body.nonce,
+      signature: body.signature
+    };
+    const payload = updateLinkTokenPayloadSchema.parse(signed.payload);
+
+    verifySignedRequest({
+      method: "POST",
+      path: "/api/update-link-token",
+      request: signed,
+      publicKeyPem: envelope.publicKeyPem
+    });
+
+    if (payload.publicKeyPem !== envelope.publicKeyPem) {
+      throw new ApiError(403, "Signed key does not match the linked Item.");
+    }
+
+    const client = createServerPlaidClient(envelope.environment);
+    const link = await client.linkTokenCreate({
+      user: {
+        client_user_id: `penny-pincher-${hashShort(envelope.publicKeyPem)}`
+      },
+      client_name: "Penny Pincher",
+      country_codes: payload.countryCodes as never,
+      language: "en",
+      access_token: envelope.accessToken,
+      additional_consented_products: payload.additionalConsentedProducts as never,
+      redirect_uri: payload.redirectUri ?? process.env.PLAID_REDIRECT_URI,
+      link_customization_name: payload.linkCustomizationName ?? process.env.PLAID_LINK_CUSTOMIZATION_NAME
+    });
+
+    response.status(200).json({
+      linkToken: link.data.link_token,
+      environment: envelope.environment
     });
   });
 }
@@ -210,6 +264,11 @@ async function callPlaidDataEndpoint(
 
   if (kind === "holdings") {
     const response = await client.investmentsHoldingsGet({ access_token: accessToken });
+    return response.data;
+  }
+
+  if (kind === "item") {
+    const response = await client.itemGet({ access_token: accessToken });
     return response.data;
   }
 

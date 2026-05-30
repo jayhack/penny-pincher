@@ -47,6 +47,14 @@ npx -p penny-pincher penny-pincher unlink --institution Robinhood
 npx -p penny-pincher penny-pincher auth --investments
 ```
 
+If Plaid returns `ADDITIONAL_CONSENT_REQUIRED` for an existing linked Item, send that Item through Plaid update mode instead:
+
+```sh
+npx -p penny-pincher penny-pincher item --institution Robinhood
+npx -p penny-pincher penny-pincher auth --update --investments --institution Robinhood
+npx -p penny-pincher penny-pincher holdings
+```
+
 If one institution should be linked for both normal transactions and investments, pass both products explicitly:
 
 ```sh
@@ -76,6 +84,7 @@ npx -p penny-pincher penny-pincher auth --env sandbox
 - `penny-pincher identity` prints account owner identity data when the product is enabled.
 - `penny-pincher numbers` prints ACH/routing data when the Plaid `auth` product is enabled.
 - `penny-pincher holdings` prints investment holdings, securities, and enriched position rows when the Plaid `investments` product is enabled.
+- `penny-pincher item` prints Plaid Item metadata, including consented and billed products when Plaid returns them.
 - `penny-pincher status` prints local connection metadata, readiness, and the next command without exposing secrets.
 - `penny-pincher doctor` prints the same machine-readable readiness report as `status`.
 - `penny-pincher usage` prints current billing-period usage and estimated costs.
@@ -124,6 +133,8 @@ The Vercel API exposes:
 - `POST /api/identity`
 - `POST /api/numbers`
 - `POST /api/holdings`
+- `POST /api/item`
+- `POST /api/update-link-token`
 
 ## Bring Your Own Plaid App
 

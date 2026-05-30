@@ -18,6 +18,7 @@ export interface LinkTokenRequest {
   products: string[];
   countryCodes: string[];
   redirectUri?: string;
+  linkCustomizationName?: string;
 }
 
 export interface LinkTokenResponse {
@@ -101,11 +102,34 @@ export interface ExchangeResponse {
   countryCodes: string[];
 }
 
+export interface UpdateLinkTokenRequest {
+  publicKeyPem: string;
+  additionalConsentedProducts: string[];
+  countryCodes: string[];
+  redirectUri?: string;
+  linkCustomizationName?: string;
+}
+
 export async function createHostedLinkToken(
   backendUrl: string,
   body: LinkTokenRequest
 ): Promise<LinkTokenResponse> {
   return postJson(backendUrl, "/api/link-token", body);
+}
+
+export async function createHostedUpdateLinkToken(
+  backendUrl: string,
+  tokenEnvelope: string,
+  payload: UpdateLinkTokenRequest,
+  privateKeyPem: string
+): Promise<LinkTokenResponse> {
+  return postSignedDataRequest<typeof payload, LinkTokenResponse>({
+    backendUrl,
+    path: "/api/update-link-token",
+    tokenEnvelope,
+    privateKeyPem,
+    payload
+  });
 }
 
 export async function createBillingCheckoutSession(

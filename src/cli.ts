@@ -23,6 +23,7 @@ import {
   getBalances,
   getHoldings,
   getIdentity,
+  getItemInfo,
   getRecurring,
   getStatus,
   getTransactions,
@@ -63,6 +64,11 @@ program
   .addOption(environmentOption())
   .option("-p, --products <products>", "Comma-separated Plaid products to request.", "transactions")
   .option("--investments", "Request only the Plaid investments product unless --products is also set.")
+  .option("--update", "Use Plaid update mode to add consent to an existing linked item.")
+  .option("--item-id <item-id>", "Update one linked item by Plaid item ID.")
+  .option("--institution <name>", "Update one linked item by exact institution name.")
+  .option("--index <index>", "Update one linked item by 1-based index from status output.", parseInteger)
+  .option("--link-customization <name>", "Plaid Link customization name to apply.")
   .option("-c, --country-codes <codes>", "Comma-separated country codes.", "US")
   .option("--port <port>", "Local auth server port.", parsePort, 7777)
   .option(
@@ -89,6 +95,14 @@ program
       openBrowser: Boolean(options.open),
       directPlaid: Boolean(options.directPlaid),
       backendUrl: options.backend,
+      linkCustomizationName: options.linkCustomization,
+      update: options.update
+        ? {
+            itemId: options.itemId,
+            institutionName: options.institution,
+            index: options.index
+          }
+        : undefined,
       onReady: emitEvent
     });
 
@@ -164,6 +178,22 @@ program
   .description("Print investment holdings and securities. Requires the Plaid investments product.")
   .addOption(jsonOption())
   .action(async () => printJson(await getHoldings()));
+
+program
+  .command("item")
+  .alias("items")
+  .description("Print Plaid Item metadata, including consented and billed products when Plaid returns them.")
+  .option("--item-id <item-id>", "Inspect one linked item by Plaid item ID.")
+  .option("--institution <name>", "Inspect one linked item by exact institution name.")
+  .option("--index <index>", "Inspect one linked item by 1-based index from status output.", parseInteger)
+  .addOption(jsonOption())
+  .action(async (options) => {
+    printJson(await getItemInfo({
+      itemId: options.itemId,
+      institutionName: options.institution,
+      index: options.index
+    }));
+  });
 
 program
   .command("status")
@@ -331,6 +361,8 @@ async function getReadinessReport() {
     linked ? "penny-pincher identity" : undefined,
     linked ? "penny-pincher numbers" : undefined,
     linked ? "penny-pincher holdings" : undefined,
+    linked ? "penny-pincher item --institution Robinhood" : undefined,
+    linked ? "penny-pincher auth --update --investments --institution Robinhood" : undefined,
     "penny-pincher auth",
     "penny-pincher auth --investments",
     linked ? "penny-pincher unlink --institution Robinhood" : undefined,

@@ -25,6 +25,17 @@ interface AccountNumbersResult {
   numbers: Record<string, unknown>;
 }
 
+interface RecurringResult {
+  itemId?: string;
+  institutionName?: string;
+  institutionId?: string;
+  updatedDatetime?: string;
+  personalFinanceCategoryVersion?: unknown;
+  requestId?: string;
+  inflowStreams: JsonRecord[];
+  outflowStreams: JsonRecord[];
+}
+
 export async function getAccounts() {
   const context = await linkedContext();
   const results = await Promise.all(context.items.map((item) => getAccountsForItem(context.config, item)));
@@ -49,6 +60,18 @@ export async function getTransactions(options: { startDate: string; endDate: str
     accounts: results.flatMap((result) => result.accounts),
     transactions,
     totalTransactions: results.reduce((total, result) => total + result.totalTransactions, 0)
+  };
+}
+
+export async function getRecurring(options: { accountIds?: string[] }) {
+  const context = await linkedContext();
+  const results = await Promise.all(context.items.map((item) => getRecurringForItem(context.config, item, options)));
+
+  return {
+    itemCount: results.length,
+    inflowStreams: results.flatMap((result) => result.inflowStreams),
+    outflowStreams: results.flatMap((result) => result.outflowStreams),
+    items: results
   };
 }
 
@@ -174,6 +197,30 @@ async function getTransactionsForItem(
   };
 }
 
+async function getRecurringForItem(
+  config: PennyPincherConfig,
+  item: LinkedAccountItem,
+  options: { accountIds?: string[] }
+): Promise<RecurringResult> {
+  if (item.mode === "hosted") {
+    const result = await hostedRequest<unknown>(config, item, "recurring", options);
+    return normalizeRecurringResult(item, result);
+  }
+
+  const client = createPlaidClient(item.environment);
+  const response = await client.transactionsRecurringGet({
+    access_token: directAccessToken(item),
+    account_ids: options.accountIds
+  });
+  return normalizeRecurringResult(item, {
+    inflowStreams: response.data.inflow_streams,
+    outflowStreams: response.data.outflow_streams,
+    updatedDatetime: response.data.updated_datetime,
+    personalFinanceCategoryVersion: response.data.personal_finance_category_version,
+    requestId: response.data.request_id
+  });
+}
+
 async function getIdentityForItem(config: PennyPincherConfig, item: LinkedAccountItem): Promise<unknown[]> {
   if (item.mode === "hosted") {
     return hostedRequest<unknown[]>(config, item, "identity", {});
@@ -258,6 +305,35 @@ function publicLinkedItem(config: PennyPincherConfig, item: LinkedAccountItem) {
   };
 }
 
+function normalizeRecurringResult(item: LinkedAccountItem, result: unknown): RecurringResult {
+  const value = result as {
+    inflowStreams?: unknown;
+    inflow_streams?: unknown;
+    outflowStreams?: unknown;
+    outflow_streams?: unknown;
+    updatedDatetime?: unknown;
+    updated_datetime?: unknown;
+    personalFinanceCategoryVersion?: unknown;
+    personal_finance_category_version?: unknown;
+    requestId?: unknown;
+    request_id?: unknown;
+  };
+  const source = {
+    itemId: item.itemId,
+    institutionName: item.institutionName,
+    institutionId: item.institutionId
+  };
+
+  return {
+    ...source,
+    updatedDatetime: stringValue(value.updatedDatetime ?? value.updated_datetime),
+    personalFinanceCategoryVersion: value.personalFinanceCategoryVersion ?? value.personal_finance_category_version,
+    requestId: stringValue(value.requestId ?? value.request_id),
+    inflowStreams: normalizeStreams(value.inflowStreams ?? value.inflow_streams, "inflow", source),
+    outflowStreams: normalizeStreams(value.outflowStreams ?? value.outflow_streams, "outflow", source)
+  };
+}
+
 function normalizeTransactionResult(result: unknown): TransactionResult {
   const value = result as {
     accounts?: unknown;
@@ -276,6 +352,22 @@ function normalizeTransactionResult(result: unknown): TransactionResult {
           ? value.total_transactions
           : 0
   };
+}
+
+function normalizeStreams(value: unknown, type: "inflow" | "outflow", source: {
+  itemId?: string;
+  institutionName?: string;
+  institutionId?: string;
+}): JsonRecord[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((stream) => ({
+    ...source,
+    streamType: type,
+    ...(isRecord(stream) ? stream : {})
+  }));
 }
 
 function normalizeAccountNumbersResult(result: unknown): AccountNumbersResult {
@@ -324,4 +416,8 @@ function transactionDate(transaction: JsonRecord): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }

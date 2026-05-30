@@ -12,6 +12,7 @@ npx -p penny-pincher penny-pincher auth
 npx -p penny-pincher penny-pincher accounts
 npx -p penny-pincher penny-pincher balances
 npx -p penny-pincher penny-pincher transactions --days 30
+npx -p penny-pincher penny-pincher recurring
 ```
 
 Running `penny-pincher` with no command prints a JSON readiness report with the next command to run. It does not open an interactive menu by default.
@@ -49,6 +50,7 @@ npx -p penny-pincher penny-pincher auth --env sandbox
 - `penny-pincher accounts` prints linked accounts.
 - `penny-pincher balances` prints accounts with balances.
 - `penny-pincher transactions --days 30` prints recent transactions.
+- `penny-pincher recurring` prints Plaid recurring inflow and outflow streams.
 - `penny-pincher identity` prints account owner identity data when the product is enabled.
 - `penny-pincher numbers` prints ACH/routing data when the Plaid `auth` product is enabled.
 - `penny-pincher status` prints local connection metadata, readiness, and the next command without exposing secrets.
@@ -94,6 +96,7 @@ The Vercel API exposes:
 - `POST /api/accounts`
 - `POST /api/balances`
 - `POST /api/transactions`
+- `POST /api/recurring`
 - `POST /api/identity`
 - `POST /api/numbers`
 

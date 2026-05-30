@@ -1,6 +1,6 @@
 {
   "name": "penny-pincher",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Agent-friendly CLI for reading bank data through Plaid.",
   "type": "module",
   "homepage": "https://penny-pincher-cli.vercel.app/",

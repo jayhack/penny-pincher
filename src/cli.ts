@@ -20,6 +20,7 @@ import {
   getAccounts,
   getBalances,
   getIdentity,
+  getRecurring,
   getStatus,
   getTransactions,
   getUsage
@@ -124,6 +125,17 @@ program
     const endDate = options.end;
     const startDate = options.start ?? daysBefore(endDate, options.days);
     printJson(await getTransactions({ startDate, endDate, count: options.count }));
+  });
+
+program
+  .command("recurring")
+  .description("Print Plaid recurring transaction streams.")
+  .option("--account-ids <ids>", "Comma-separated Plaid account IDs to include.")
+  .addOption(jsonOption())
+  .action(async (options) => {
+    printJson(await getRecurring({
+      accountIds: options.accountIds ? splitList(options.accountIds) : undefined
+    }));
   });
 
 program
@@ -245,7 +257,8 @@ function buildInteractiveChoices(config: PennyPincherConfig): Array<{ name: stri
     choices.push(
       { name: "Show accounts", value: ["accounts"] },
       { name: "Show balances", value: ["balances"] },
-      { name: "Show recent transactions", value: ["transactions"] }
+      { name: "Show recent transactions", value: ["transactions"] },
+      { name: "Show recurring charges", value: ["recurring"] }
     );
   }
 
@@ -265,6 +278,7 @@ async function getReadinessReport() {
     linked ? "penny-pincher accounts" : undefined,
     linked ? "penny-pincher balances" : undefined,
     linked ? "penny-pincher transactions --days 30" : undefined,
+    linked ? "penny-pincher recurring" : undefined,
     linked ? "penny-pincher identity" : undefined,
     linked ? "penny-pincher numbers" : undefined,
     "penny-pincher auth",

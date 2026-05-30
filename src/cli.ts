@@ -5,7 +5,15 @@ import chalk from "chalk";
 import { Command, Option } from "commander";
 import open from "open";
 import { runAuthFlow, type AuthReadyEvent } from "./auth.js";
-import { clearLinkedAccount, configPath, loadConfig, normalizePlaidEnvironment, plaidEnvironments, type PennyPincherConfig } from "./config.js";
+import {
+  clearLinkedAccount,
+  configPath,
+  getLinkedItems,
+  loadConfig,
+  normalizePlaidEnvironment,
+  plaidEnvironments,
+  type PennyPincherConfig
+} from "./config.js";
 import {
   createBillingPortal,
   getAccountNumbers,
@@ -252,7 +260,6 @@ function buildInteractiveChoices(config: PennyPincherConfig): Array<{ name: stri
 async function getReadinessReport() {
   const status = await getStatus();
   const linked = status.linked;
-  const hosted = status.hosted;
   const availableCommands = [
     "penny-pincher status --json",
     linked ? "penny-pincher accounts" : undefined,
@@ -293,12 +300,8 @@ function createAuthEventEmitter(json: boolean): (event: AuthReadyEvent) => void 
   };
 }
 
-function isLinked(config: Pick<PennyPincherConfig, "tokenEnvelope" | "accessToken">): boolean {
-  return Boolean(config.tokenEnvelope || config.accessToken);
-}
-
-function isHosted(config: Pick<PennyPincherConfig, "backendUrl" | "publicKeyPem" | "privateKeyPem">): boolean {
-  return Boolean(config.backendUrl && config.publicKeyPem && config.privateKeyPem);
+function isLinked(config: PennyPincherConfig): boolean {
+  return getLinkedItems(config).length > 0;
 }
 
 function printJson(value: unknown): void {

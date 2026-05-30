@@ -1,88 +1,84 @@
 import { createBillingPortalSession, getBillingUsage, postSignedDataRequest, resolveBackendUrl } from "./backend.js";
-import { loadConfig } from "./config.js";
+import {
+  getLinkedItems,
+  loadConfig,
+  type LinkedAccountItem,
+  type PennyPincherConfig
+} from "./config.js";
 import { createPlaidClient } from "./plaid.js";
 
-export async function getAccounts() {
-  const hosted = await hostedRequest("accounts", {});
-  if (hosted) {
-    return hosted;
-  }
+type JsonRecord = Record<string, unknown>;
 
-  const { client, accessToken } = await linkedClient();
-  const response = await client.accountsGet({ access_token: accessToken });
-  return response.data.accounts;
+interface LinkedContext {
+  config: PennyPincherConfig;
+  items: LinkedAccountItem[];
+}
+
+interface TransactionResult {
+  accounts: unknown[];
+  transactions: JsonRecord[];
+  totalTransactions: number;
+}
+
+interface AccountNumbersResult {
+  accounts: unknown[];
+  numbers: Record<string, unknown>;
+}
+
+export async function getAccounts() {
+  const context = await linkedContext();
+  const results = await Promise.all(context.items.map((item) => getAccountsForItem(context.config, item)));
+  return results.flat();
 }
 
 export async function getBalances() {
-  const hosted = await hostedRequest("balances", {});
-  if (hosted) {
-    return hosted;
-  }
-
-  const { client, accessToken } = await linkedClient();
-  const response = await client.accountsBalanceGet({ access_token: accessToken });
-  return response.data.accounts;
+  const context = await linkedContext();
+  const results = await Promise.all(context.items.map((item) => getBalancesForItem(context.config, item)));
+  return results.flat();
 }
 
 export async function getTransactions(options: { startDate: string; endDate: string; count: number }) {
-  const hosted = await hostedRequest("transactions", options);
-  if (hosted) {
-    return hosted;
-  }
-
-  const { client, accessToken } = await linkedClient();
-  const response = await client.transactionsGet({
-    access_token: accessToken,
-    start_date: options.startDate,
-    end_date: options.endDate,
-    options: {
-      count: options.count
-    }
-  });
+  const context = await linkedContext();
+  const results = await Promise.all(context.items.map((item) => getTransactionsForItem(context.config, item, options)));
+  const transactions = results
+    .flatMap((result) => result.transactions)
+    .sort((left, right) => transactionDate(right).localeCompare(transactionDate(left)))
+    .slice(0, options.count);
 
   return {
-    accounts: response.data.accounts,
-    transactions: response.data.transactions,
-    totalTransactions: response.data.total_transactions
+    accounts: results.flatMap((result) => result.accounts),
+    transactions,
+    totalTransactions: results.reduce((total, result) => total + result.totalTransactions, 0)
   };
 }
 
 export async function getIdentity() {
-  const hosted = await hostedRequest("identity", {});
-  if (hosted) {
-    return hosted;
-  }
-
-  const { client, accessToken } = await linkedClient();
-  const response = await client.identityGet({ access_token: accessToken });
-  return response.data.accounts;
+  const context = await linkedContext();
+  const results = await Promise.all(context.items.map((item) => getIdentityForItem(context.config, item)));
+  return results.flat();
 }
 
 export async function getAccountNumbers() {
-  const hosted = await hostedRequest("numbers", {});
-  if (hosted) {
-    return hosted;
-  }
-
-  const { client, accessToken } = await linkedClient();
-  const response = await client.authGet({ access_token: accessToken });
-  return {
-    accounts: response.data.accounts,
-    numbers: response.data.numbers
-  };
+  const context = await linkedContext();
+  const results = await Promise.all(context.items.map((item) => getAccountNumbersForItem(context.config, item)));
+  return mergeAccountNumbers(results);
 }
 
 export async function getStatus() {
   const config = await loadConfig();
-  const mode = config.tokenEnvelope ? "hosted" : config.accessToken ? "direct" : config.mode;
-  const backendUrl = mode === "direct" ? undefined : resolveBackendUrl(config.backendUrl);
+  const items = getLinkedItems(config);
+  const primary = items.at(-1);
+  const mode = primary?.mode ?? config.mode;
+  const backendUrl = mode === "direct" ? undefined : resolveBackendUrl(primary?.backendUrl ?? config.backendUrl);
 
   return {
     mode,
-    environment: config.environment,
+    environment: primary?.environment ?? config.environment,
     backendUrl,
-    linked: Boolean(config.tokenEnvelope || config.accessToken),
-    hosted: mode === "hosted" && Boolean(backendUrl && config.publicKeyPem && config.privateKeyPem),
+    linked: items.length > 0,
+    itemCount: items.length,
+    hosted: items.some((item) => item.mode === "hosted") && Boolean(config.publicKeyPem && config.privateKeyPem),
+    items: items.map((item) => publicLinkedItem(config, item)),
     itemId: config.itemId,
     institutionName: config.institutionName,
     institutionId: config.institutionId,
@@ -120,35 +116,105 @@ export async function createBillingPortal(returnUrl: string) {
   );
 }
 
-async function linkedClient() {
+async function linkedContext(): Promise<LinkedContext> {
   const config = await loadConfig();
+  const items = getLinkedItems(config);
 
-  if (!config.accessToken) {
+  if (items.length === 0) {
     throw new Error("No linked Plaid item found. Run `penny-pincher auth` first.");
   }
 
+  return { config, items };
+}
+
+async function getAccountsForItem(config: PennyPincherConfig, item: LinkedAccountItem): Promise<unknown[]> {
+  if (item.mode === "hosted") {
+    return hostedRequest<unknown[]>(config, item, "accounts", {});
+  }
+
+  const client = createPlaidClient(item.environment);
+  const response = await client.accountsGet({ access_token: directAccessToken(item) });
+  return response.data.accounts;
+}
+
+async function getBalancesForItem(config: PennyPincherConfig, item: LinkedAccountItem): Promise<unknown[]> {
+  if (item.mode === "hosted") {
+    return hostedRequest<unknown[]>(config, item, "balances", {});
+  }
+
+  const client = createPlaidClient(item.environment);
+  const response = await client.accountsBalanceGet({ access_token: directAccessToken(item) });
+  return response.data.accounts;
+}
+
+async function getTransactionsForItem(
+  config: PennyPincherConfig,
+  item: LinkedAccountItem,
+  options: { startDate: string; endDate: string; count: number }
+): Promise<TransactionResult> {
+  if (item.mode === "hosted") {
+    const result = await hostedRequest<unknown>(config, item, "transactions", options);
+    return normalizeTransactionResult(result);
+  }
+
+  const client = createPlaidClient(item.environment);
+  const response = await client.transactionsGet({
+    access_token: directAccessToken(item),
+    start_date: options.startDate,
+    end_date: options.endDate,
+    options: {
+      count: options.count
+    }
+  });
+
   return {
-    client: createPlaidClient(config.environment),
-    accessToken: config.accessToken
+    accounts: response.data.accounts,
+    transactions: response.data.transactions as unknown as JsonRecord[],
+    totalTransactions: response.data.total_transactions
   };
 }
 
-async function hostedRequest<TResult>(path: string, payload: unknown): Promise<TResult | undefined> {
-  const config = await loadConfig();
-
-  if (!config.tokenEnvelope) {
-    return undefined;
+async function getIdentityForItem(config: PennyPincherConfig, item: LinkedAccountItem): Promise<unknown[]> {
+  if (item.mode === "hosted") {
+    return hostedRequest<unknown[]>(config, item, "identity", {});
   }
 
-  if (!config.privateKeyPem) {
+  const client = createPlaidClient(item.environment);
+  const response = await client.identityGet({ access_token: directAccessToken(item) });
+  return response.data.accounts;
+}
+
+async function getAccountNumbersForItem(
+  config: PennyPincherConfig,
+  item: LinkedAccountItem
+): Promise<AccountNumbersResult> {
+  if (item.mode === "hosted") {
+    const result = await hostedRequest<unknown>(config, item, "numbers", {});
+    return normalizeAccountNumbersResult(result);
+  }
+
+  const client = createPlaidClient(item.environment);
+  const response = await client.authGet({ access_token: directAccessToken(item) });
+  return {
+    accounts: response.data.accounts,
+    numbers: response.data.numbers as unknown as Record<string, unknown>
+  };
+}
+
+function hostedRequest<TResult>(
+  config: PennyPincherConfig,
+  item: LinkedAccountItem,
+  path: string,
+  payload: unknown
+): Promise<TResult> {
+  if (!item.tokenEnvelope || !config.privateKeyPem) {
     throw new Error("Hosted Penny Pincher config is incomplete. Run `penny-pincher auth` again.");
   }
-  const backendUrl = resolveBackendUrl(config.backendUrl);
 
   return postSignedDataRequest<typeof payload, TResult>({
-    backendUrl,
+    backendUrl: resolveBackendUrl(item.backendUrl ?? config.backendUrl),
     path: `/api/${path}`,
-    tokenEnvelope: config.tokenEnvelope,
+    tokenEnvelope: item.tokenEnvelope,
     privateKeyPem: config.privateKeyPem,
     payload
   });
@@ -167,4 +233,95 @@ async function hostedBillingConfig() {
     publicKeyPem: config.publicKeyPem,
     privateKeyPem: config.privateKeyPem
   };
+}
+
+function directAccessToken(item: LinkedAccountItem): string {
+  if (!item.accessToken) {
+    throw new Error(`Direct Plaid config is incomplete for ${item.institutionName ?? item.itemId ?? "linked item"}.`);
+  }
+
+  return item.accessToken;
+}
+
+function publicLinkedItem(config: PennyPincherConfig, item: LinkedAccountItem) {
+  return {
+    mode: item.mode,
+    environment: item.environment,
+    backendUrl: item.mode === "hosted" ? resolveBackendUrl(item.backendUrl ?? config.backendUrl) : undefined,
+    itemId: item.itemId,
+    institutionName: item.institutionName,
+    institutionId: item.institutionId,
+    products: item.products,
+    countryCodes: item.countryCodes,
+    linkedAt: item.linkedAt,
+    updatedAt: item.updatedAt
+  };
+}
+
+function normalizeTransactionResult(result: unknown): TransactionResult {
+  const value = result as {
+    accounts?: unknown;
+    transactions?: unknown;
+    totalTransactions?: unknown;
+    total_transactions?: unknown;
+  };
+
+  return {
+    accounts: Array.isArray(value.accounts) ? value.accounts : [],
+    transactions: Array.isArray(value.transactions) ? value.transactions as JsonRecord[] : [],
+    totalTransactions:
+      typeof value.totalTransactions === "number"
+        ? value.totalTransactions
+        : typeof value.total_transactions === "number"
+          ? value.total_transactions
+          : 0
+  };
+}
+
+function normalizeAccountNumbersResult(result: unknown): AccountNumbersResult {
+  const value = result as {
+    accounts?: unknown;
+    numbers?: unknown;
+  };
+
+  return {
+    accounts: Array.isArray(value.accounts) ? value.accounts : [],
+    numbers: isRecord(value.numbers) ? value.numbers : {}
+  };
+}
+
+function mergeAccountNumbers(results: AccountNumbersResult[]): AccountNumbersResult {
+  const numbers: Record<string, unknown> = {};
+
+  for (const result of results) {
+    for (const [key, value] of Object.entries(result.numbers)) {
+      if (Array.isArray(value)) {
+        const existing = numbers[key];
+        numbers[key] = [...(Array.isArray(existing) ? existing : []), ...value];
+      } else if (value !== undefined) {
+        numbers[key] = value;
+      }
+    }
+  }
+
+  return {
+    accounts: results.flatMap((result) => result.accounts),
+    numbers
+  };
+}
+
+function transactionDate(transaction: JsonRecord): string {
+  if (typeof transaction.date === "string") {
+    return transaction.date;
+  }
+
+  if (typeof transaction.authorized_date === "string") {
+    return transaction.authorized_date;
+  }
+
+  return "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

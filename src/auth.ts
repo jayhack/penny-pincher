@@ -10,7 +10,14 @@ import {
   getBillingStatus,
   normalizeBackendUrl
 } from "./backend.js";
-import { type PennyPincherConfig, loadConfig, type PlaidEnvironment, saveConfig } from "./config.js";
+import {
+  type LinkedAccountItem,
+  type PennyPincherConfig,
+  loadConfig,
+  type PlaidEnvironment,
+  saveConfig,
+  upsertLinkedItem
+} from "./config.js";
 import { generateSigningKeyPair } from "./crypto.js";
 import { createPlaidClient } from "./plaid.js";
 
@@ -100,19 +107,18 @@ async function runHostedAuthFlow(options: AuthOptions): Promise<PennyPincherConf
         },
         keyPair.privateKeyPem
       );
-      const config: PennyPincherConfig = {
+      const item: LinkedAccountItem = {
         mode: "hosted",
         environment: exchange.environment,
         backendUrl,
         tokenEnvelope: exchange.tokenEnvelope,
-        publicKeyPem: keyPair.publicKeyPem,
-        privateKeyPem: keyPair.privateKeyPem,
         itemId: exchange.itemId,
         institutionName: exchange.institutionName,
         institutionId: exchange.institutionId,
         products: exchange.products,
         countryCodes: exchange.countryCodes
       };
+      const config = upsertLinkedItem(await loadConfig(), item);
 
       await saveConfig(config);
       return config;
@@ -262,7 +268,7 @@ async function runDirectAuthFlow(options: AuthOptions): Promise<PennyPincherConf
       const exchange = await client.itemPublicTokenExchange({
         public_token: publicToken
       });
-      const config: PennyPincherConfig = {
+      const item: LinkedAccountItem = {
         mode: "direct",
         environment: options.environment,
         accessToken: exchange.data.access_token,
@@ -272,6 +278,7 @@ async function runDirectAuthFlow(options: AuthOptions): Promise<PennyPincherConf
         products: options.products,
         countryCodes: options.countryCodes
       };
+      const config = upsertLinkedItem(await loadConfig(), item);
 
       await saveConfig(config);
       return config;

@@ -39,6 +39,14 @@ npx -p penny-pincher penny-pincher auth --investments
 npx -p penny-pincher penny-pincher holdings
 ```
 
+If an existing Robinhood link was created without Investments consent, remove that one local item before re-linking:
+
+```sh
+npx -p penny-pincher penny-pincher status --json
+npx -p penny-pincher penny-pincher unlink --institution Robinhood
+npx -p penny-pincher penny-pincher auth --investments
+```
+
 If one institution should be linked for both normal transactions and investments, pass both products explicitly:
 
 ```sh
@@ -72,6 +80,7 @@ npx -p penny-pincher penny-pincher auth --env sandbox
 - `penny-pincher doctor` prints the same machine-readable readiness report as `status`.
 - `penny-pincher usage` prints current billing-period usage and estimated costs.
 - `penny-pincher billing` prints a Stripe Customer Portal URL.
+- `penny-pincher unlink --item-id <id>` removes one saved linked item from local config. You can also use `--institution <name>` or `--index <n>`.
 - `penny-pincher interactive` opens the human-oriented menu.
 - `penny-pincher logout` removes all saved local tokens.
 

@@ -47,6 +47,11 @@ const configSchema = z.object({
 
 export type PennyPincherConfig = z.infer<typeof configSchema>;
 export type LinkedAccountItem = z.infer<typeof linkedAccountItemSchema>;
+export type LinkedAccountRemovalSelector = {
+  itemId?: string;
+  institutionName?: string;
+  index?: number;
+};
 
 export const configDir = join(homedir(), ".penny-pincher");
 export const configPath = join(configDir, "config.json");
@@ -94,25 +99,27 @@ export async function hasConfigFile(): Promise<boolean> {
 
 export async function clearLinkedAccount(): Promise<void> {
   const config = await loadConfig();
-  const {
-    accessToken,
-    tokenEnvelope,
-    items,
-    itemId,
-    institutionName,
-    institutionId,
-    ...rest
-  } = config;
-  void accessToken;
-  void tokenEnvelope;
-  void items;
-  void itemId;
-  void institutionName;
-  void institutionId;
   await saveConfig({
-    ...rest,
+    ...withoutLegacyLinkedItemFields(config),
     items: []
   });
+}
+
+export async function removeLinkedAccountItem(
+  selector: LinkedAccountRemovalSelector
+): Promise<{ removed: LinkedAccountItem; remaining: LinkedAccountItem[] }> {
+  const config = await loadConfig();
+  const items = getLinkedItems(config);
+  const removalIndex = findRemovalIndex(items, selector);
+  const removed = items[removalIndex];
+  const remaining = items.filter((_, index) => index !== removalIndex);
+
+  await saveConfig({
+    ...withoutLegacyLinkedItemFields(config),
+    items: remaining
+  });
+
+  return { removed, remaining };
 }
 
 export function getLinkedItems(config: PennyPincherConfig): LinkedAccountItem[] {
@@ -170,6 +177,75 @@ async function loadLegacyConfig(): Promise<PennyPincherConfig> {
 
 function isMissingFileError(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function findRemovalIndex(items: LinkedAccountItem[], selector: LinkedAccountRemovalSelector): number {
+  if (items.length === 0) {
+    throw new Error("No linked Plaid item found. Run `penny-pincher auth` first.");
+  }
+
+  const selectors = [selector.itemId, selector.institutionName, selector.index].filter((value) => value !== undefined);
+  if (selectors.length !== 1) {
+    throw new Error("Choose exactly one linked item selector: --item-id, --institution, or --index.");
+  }
+
+  if (selector.index !== undefined) {
+    if (!Number.isInteger(selector.index) || selector.index < 1 || selector.index > items.length) {
+      throw new Error(`Linked item index must be between 1 and ${items.length}.`);
+    }
+
+    return selector.index - 1;
+  }
+
+  const matches = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => matchesRemovalSelector(item, selector));
+
+  if (matches.length === 0) {
+    throw new Error("No linked item matched that selector. Run `penny-pincher status --json` to inspect linked items.");
+  }
+
+  if (matches.length > 1) {
+    const summary = matches
+      .map(({ item, index }) => `${index + 1}: ${item.institutionName ?? "Unknown institution"} (${item.itemId ?? "no itemId"})`)
+      .join("; ");
+    throw new Error(`Multiple linked items matched. Use --item-id or --index. Matches: ${summary}`);
+  }
+
+  return matches[0].index;
+}
+
+function matchesRemovalSelector(item: LinkedAccountItem, selector: LinkedAccountRemovalSelector): boolean {
+  if (selector.itemId) {
+    return item.itemId === selector.itemId;
+  }
+
+  if (selector.institutionName) {
+    return normalizeInstitutionName(item.institutionName) === normalizeInstitutionName(selector.institutionName);
+  }
+
+  return false;
+}
+
+function normalizeInstitutionName(value: string | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function withoutLegacyLinkedItemFields(config: PennyPincherConfig): PennyPincherConfig {
+  const {
+    accessToken,
+    tokenEnvelope,
+    itemId,
+    institutionName,
+    institutionId,
+    ...rest
+  } = config;
+  void accessToken;
+  void tokenEnvelope;
+  void itemId;
+  void institutionName;
+  void institutionId;
+  return rest;
 }
 
 function normalizeConfig(config: PennyPincherConfig): PennyPincherConfig {

@@ -187,7 +187,7 @@
 
           <section class="faq-card">
             <h2>What can an agent read?</h2>
-            <p>Today the CLI supports accounts, balances, transactions, investment holdings, identity, account/routing numbers when enabled, status, and logout. Data commands write JSON to stdout.</p>
+            <p>Today the CLI supports accounts, balances, transactions, recurring transaction streams, investment holdings, identity, account/routing numbers when enabled, status, unlink, and logout. Data commands write JSON to stdout.</p>
           </section>
 
           <section class="faq-card">
@@ -212,7 +212,7 @@
 
           <section class="faq-card">
             <h2>Can I revoke access?</h2>
-            <p><code>penny-pincer logout</code> removes the local token envelope. For complete revocation, remove the connected item in Plaid or your bank connection settings.</p>
+            <p><code>penny-pincher unlink</code> removes one local token envelope, while <code>penny-pincher logout</code> removes all local token envelopes. For complete revocation, remove the connected item in Plaid or your bank connection settings.</p>
           </section>
         </div>
       </main>

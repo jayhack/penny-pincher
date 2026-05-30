@@ -124,7 +124,7 @@ export async function getStatus() {
     linked: items.length > 0,
     itemCount: items.length,
     hosted: items.some((item) => item.mode === "hosted") && Boolean(config.publicKeyPem && config.privateKeyPem),
-    items: items.map((item) => publicLinkedItem(config, item)),
+    items: items.map((item, index) => publicLinkedItem(config, item, index)),
     itemId: config.itemId,
     institutionName: config.institutionName,
     institutionId: config.institutionId,
@@ -324,8 +324,9 @@ function directAccessToken(item: LinkedAccountItem): string {
   return item.accessToken;
 }
 
-function publicLinkedItem(config: PennyPincherConfig, item: LinkedAccountItem) {
+function publicLinkedItem(config: PennyPincherConfig, item: LinkedAccountItem, index: number) {
   return {
+    index: index + 1,
     mode: item.mode,
     environment: item.environment,
     backendUrl: item.mode === "hosted" ? resolveBackendUrl(item.backendUrl ?? config.backendUrl) : undefined,

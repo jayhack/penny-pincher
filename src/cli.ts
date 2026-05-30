@@ -12,6 +12,8 @@ import {
   loadConfig,
   normalizePlaidEnvironment,
   plaidEnvironments,
+  removeLinkedAccountItem,
+  type LinkedAccountItem,
   type PennyPincherConfig
 } from "./config.js";
 import {
@@ -211,9 +213,24 @@ program
 
 program
   .command("logout")
-  .description("Remove the locally saved Plaid access token.")
+  .description("Remove locally saved Plaid tokens. With no selector, removes every linked item.")
+  .option("--item-id <item-id>", "Remove one linked item by Plaid item ID.")
+  .option("--institution <name>", "Remove one linked item by exact institution name.")
+  .option("--index <index>", "Remove one linked item by 1-based index from status output.", parseInteger)
   .addOption(jsonOption())
   .action(async (options) => {
+    if (hasRemovalSelector(options)) {
+      const result = await removeLinkedItem(options);
+      if (options.json) {
+        printJson({ ok: true, configPath, ...result });
+        return;
+      }
+
+      console.error(chalk.green(`Removed ${result.removed.institutionName ?? "linked item"}.`));
+      console.error(chalk.dim(`${result.remainingCount} linked item${result.remainingCount === 1 ? "" : "s"} remain.`));
+      return;
+    }
+
     await clearLinkedAccount();
     if (options.json) {
       printJson({ ok: true, linked: false, configPath });
@@ -221,6 +238,24 @@ program
     }
 
     console.error(chalk.green("Removed local Plaid token."));
+  });
+
+program
+  .command("unlink")
+  .description("Remove one locally saved linked item without clearing every account.")
+  .option("--item-id <item-id>", "Remove one linked item by Plaid item ID.")
+  .option("--institution <name>", "Remove one linked item by exact institution name.")
+  .option("--index <index>", "Remove one linked item by 1-based index from status output.", parseInteger)
+  .addOption(jsonOption())
+  .action(async (options) => {
+    const result = await removeLinkedItem(options);
+    if (options.json) {
+      printJson({ ok: true, configPath, ...result });
+      return;
+    }
+
+    console.error(chalk.green(`Removed ${result.removed.institutionName ?? "linked item"}.`));
+    console.error(chalk.dim(`${result.remainingCount} linked item${result.remainingCount === 1 ? "" : "s"} remain.`));
   });
 
 program
@@ -277,7 +312,7 @@ function buildInteractiveChoices(config: PennyPincherConfig): Array<{ name: stri
   }
 
   choices.push({
-    name: isLinked(config) ? "Reconnect bank account" : "Connect bank account",
+    name: isLinked(config) ? "Reconnect account" : "Connect account",
     value: ["auth", "--open"]
   });
 
@@ -298,6 +333,7 @@ async function getReadinessReport() {
     linked ? "penny-pincher holdings" : undefined,
     "penny-pincher auth",
     "penny-pincher auth --investments",
+    linked ? "penny-pincher unlink --institution Robinhood" : undefined,
     "penny-pincher interactive"
   ].filter((command): command is string => Boolean(command));
 
@@ -309,7 +345,7 @@ async function getReadinessReport() {
     requiresHuman: !linked,
     nextCommand: linked ? "penny-pincher transactions --days 30" : "penny-pincher auth",
     reason: linked
-      ? "Ready to query linked bank data."
+      ? "Ready to query linked financial data."
       : "Plaid Link authorization has not been completed.",
     availableCommands
   };
@@ -340,6 +376,44 @@ function printJson(value: unknown): void {
 
 function printJsonLine(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`);
+}
+
+async function removeLinkedItem(options: {
+  itemId?: string;
+  institution?: string;
+  index?: number;
+}) {
+  const result = await removeLinkedAccountItem({
+    itemId: options.itemId,
+    institutionName: options.institution,
+    index: options.index
+  });
+
+  return {
+    linked: result.remaining.length > 0,
+    removed: publicLinkedItem(result.removed),
+    remainingCount: result.remaining.length,
+    remainingItems: result.remaining.map((item, index) => publicLinkedItem(item, index))
+  };
+}
+
+function hasRemovalSelector(options: { itemId?: string; institution?: string; index?: number }): boolean {
+  return options.itemId !== undefined || options.institution !== undefined || options.index !== undefined;
+}
+
+function publicLinkedItem(item: LinkedAccountItem, index?: number) {
+  return {
+    index: index === undefined ? undefined : index + 1,
+    mode: item.mode,
+    environment: item.environment,
+    itemId: item.itemId,
+    institutionName: item.institutionName,
+    institutionId: item.institutionId,
+    products: item.products,
+    countryCodes: item.countryCodes,
+    linkedAt: item.linkedAt,
+    updatedAt: item.updatedAt
+  };
 }
 
 function splitList(value: string): string[] {
@@ -443,6 +517,19 @@ function normalizeCliError(error: unknown): { code: string; message: string; nex
       code: "not_linked",
       message,
       nextCommand: "penny-pincher auth"
+    };
+  }
+
+  if (
+    message.includes("Choose exactly one linked item selector")
+    || message.includes("No linked item matched")
+    || message.includes("Multiple linked items matched")
+    || message.includes("Linked item index must be")
+  ) {
+    return {
+      code: "invalid_linked_item_selector",
+      message,
+      nextCommand: "penny-pincher status --json"
     };
   }
 

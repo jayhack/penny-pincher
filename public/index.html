@@ -598,7 +598,7 @@
       <section id="commands" class="max-w-[1100px] mx-auto px-6 pb-20">
         <div class="flex items-baseline justify-between gap-4 mb-5">
           <h2 class="label glyph-cell" style="color: var(--glyph);">§03 / Commands</h2>
-          <span class="mono-up text-[10px]" style="color: var(--stone);">09 verbs · JSON out</span>
+          <span class="mono-up text-[10px]" style="color: var(--stone);">JSON out · pipe anywhere</span>
         </div>
 
         <h3 class="display-lift mb-10" style="font-size: clamp(2rem, 5vw, 3.2rem);">
@@ -627,6 +627,10 @@
             <div class="desc">Print recent transactions. <span style="color: var(--stone);">Also accepts <code class="mono">--start</code> / <code class="mono">--end</code>.</span></div>
           </div>
           <div class="cmd-row">
+            <div class="cmd">penny-pincher recurring</div>
+            <div class="desc">Print Plaid recurring inflow and outflow streams.</div>
+          </div>
+          <div class="cmd-row">
             <div class="cmd">penny-pincher identity</div>
             <div class="desc">Print account owner identity data when the product is enabled.</div>
           </div>
@@ -643,8 +647,12 @@
             <div class="desc">Print local connection metadata without exposing the access token.</div>
           </div>
           <div class="cmd-row">
+            <div class="cmd">penny-pincher unlink --institution Robinhood</div>
+            <div class="desc">Remove one saved linked item from local config before re-linking with new Plaid consent.</div>
+          </div>
+          <div class="cmd-row">
             <div class="cmd">penny-pincher logout</div>
-            <div class="desc">Remove the saved local token envelope.</div>
+            <div class="desc">Remove every saved local token envelope.</div>
           </div>
         </div>
 

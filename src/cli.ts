@@ -25,6 +25,7 @@ import {
   getTransactions,
   getUsage
 } from "./data.js";
+import { startDashboard } from "./dashboard.js";
 
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json") as { version: string };
@@ -106,6 +107,37 @@ program
   .description("Print linked accounts.")
   .addOption(jsonOption())
   .action(async () => printJson(await getAccounts()));
+
+program
+  .command("dashboard")
+  .description("Open a local dashboard for linked accounts.")
+  .option("--port <port>", "Local dashboard server port.", parsePort, 7778)
+  .option("--no-open", "Print the dashboard URL without opening a browser.")
+  .addOption(jsonOption())
+  .action(async (options) => {
+    const dashboard = await startDashboard({
+      port: options.port,
+      openBrowser: Boolean(options.open)
+    });
+
+    if (options.json) {
+      printJsonLine({
+        ok: true,
+        type: "dashboard_url",
+        url: dashboard.url,
+        opened: dashboard.opened,
+        openError: dashboard.openError,
+        configPath
+      });
+      return;
+    }
+
+    console.error(chalk.cyan(`Dashboard: ${dashboard.url}`));
+    if (dashboard.openError) {
+      console.error(chalk.yellow(`Could not open browser automatically: ${dashboard.openError}`));
+    }
+    console.error(chalk.dim("Press Ctrl-C to stop the local dashboard server."));
+  });
 
 program
   .command("balances")
@@ -256,6 +288,7 @@ function buildInteractiveChoices(config: PennyPincherConfig): Array<{ name: stri
   if (isLinked(config)) {
     choices.push(
       { name: "Show accounts", value: ["accounts"] },
+      { name: "Open dashboard", value: ["dashboard"] },
       { name: "Show balances", value: ["balances"] },
       { name: "Show recent transactions", value: ["transactions"] },
       { name: "Show recurring charges", value: ["recurring"] }
@@ -276,6 +309,7 @@ async function getReadinessReport() {
   const availableCommands = [
     "penny-pincher status --json",
     linked ? "penny-pincher accounts" : undefined,
+    linked ? "penny-pincher dashboard" : undefined,
     linked ? "penny-pincher balances" : undefined,
     linked ? "penny-pincher transactions --days 30" : undefined,
     linked ? "penny-pincher recurring" : undefined,

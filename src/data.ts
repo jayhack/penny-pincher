@@ -42,6 +42,16 @@ export async function getAccounts() {
   return results.flat();
 }
 
+export async function getAccountGroups() {
+  const context = await linkedContext();
+  return Promise.all(
+    context.items.map(async (item) => ({
+      item: publicLinkedItem(context.config, item),
+      accounts: await getAccountsForItem(context.config, item)
+    }))
+  );
+}
+
 export async function getBalances() {
   const context = await linkedContext();
   const results = await Promise.all(context.items.map((item) => getBalancesForItem(context.config, item)));

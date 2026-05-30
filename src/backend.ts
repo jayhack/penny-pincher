@@ -2,6 +2,10 @@ import type { PlaidEnvironment } from "./config.js";
 import { createSignedRequest, type SignedRequest } from "./crypto.js";
 
 export const defaultBackendUrl = "https://penny-pincher.vercel.app";
+const legacyDefaultBackendUrls = new Set([
+  "http://localhost:3000/",
+  "http://127.0.0.1:3000/"
+]);
 
 export interface BackendErrorBody {
   error?: string;
@@ -217,6 +221,26 @@ async function postJson<TResult>(backendUrl: string, path: string, body: unknown
 
 export function normalizeBackendUrl(url: string): string {
   return url.endsWith("/") ? url : `${url}/`;
+}
+
+export function resolveBackendUrl(configuredUrl?: string): string {
+  const override =
+    process.env.PENNY_PINCHER_API_URL
+    ?? process.env.PENNY_PINCER_API_URL
+    ?? process.env.FINCLAW_API_URL;
+
+  if (override) {
+    return normalizeBackendUrl(override);
+  }
+
+  if (!configuredUrl) {
+    return normalizeBackendUrl(defaultBackendUrl);
+  }
+
+  const normalized = normalizeBackendUrl(configuredUrl);
+  return legacyDefaultBackendUrls.has(normalized)
+    ? normalizeBackendUrl(defaultBackendUrl)
+    : normalized;
 }
 
 export type SignedBackendRequest<TPayload> = SignedRequest<TPayload> & {

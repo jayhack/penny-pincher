@@ -1,4 +1,4 @@
-import { createBillingPortalSession, getBillingUsage, postSignedDataRequest } from "./backend.js";
+import { createBillingPortalSession, getBillingUsage, postSignedDataRequest, resolveBackendUrl } from "./backend.js";
 import { loadConfig } from "./config.js";
 import { createPlaidClient } from "./plaid.js";
 
@@ -74,13 +74,15 @@ export async function getAccountNumbers() {
 
 export async function getStatus() {
   const config = await loadConfig();
+  const mode = config.tokenEnvelope ? "hosted" : config.accessToken ? "direct" : config.mode;
+  const backendUrl = mode === "direct" ? undefined : resolveBackendUrl(config.backendUrl);
 
   return {
-    mode: config.tokenEnvelope ? "hosted" : config.accessToken ? "direct" : config.mode,
+    mode,
     environment: config.environment,
-    backendUrl: config.backendUrl,
+    backendUrl,
     linked: Boolean(config.tokenEnvelope || config.accessToken),
-    hosted: Boolean(config.backendUrl && config.publicKeyPem && config.privateKeyPem),
+    hosted: mode === "hosted" && Boolean(backendUrl && config.publicKeyPem && config.privateKeyPem),
     itemId: config.itemId,
     institutionName: config.institutionName,
     institutionId: config.institutionId,
@@ -138,12 +140,13 @@ async function hostedRequest<TResult>(path: string, payload: unknown): Promise<T
     return undefined;
   }
 
-  if (!config.backendUrl || !config.privateKeyPem) {
+  if (!config.privateKeyPem) {
     throw new Error("Hosted Penny Pincher config is incomplete. Run `penny-pincher auth` again.");
   }
+  const backendUrl = resolveBackendUrl(config.backendUrl);
 
   return postSignedDataRequest<typeof payload, TResult>({
-    backendUrl: config.backendUrl,
+    backendUrl,
     path: `/api/${path}`,
     tokenEnvelope: config.tokenEnvelope,
     privateKeyPem: config.privateKeyPem,
@@ -154,12 +157,13 @@ async function hostedRequest<TResult>(path: string, payload: unknown): Promise<T
 async function hostedBillingConfig() {
   const config = await loadConfig();
 
-  if (!config.backendUrl || !config.publicKeyPem || !config.privateKeyPem) {
+  if (!config.publicKeyPem || !config.privateKeyPem) {
     throw new Error("Hosted Penny Pincher billing config is incomplete. Run `penny-pincher auth` first.");
   }
+  const backendUrl = resolveBackendUrl(config.backendUrl);
 
   return {
-    backendUrl: config.backendUrl,
+    backendUrl,
     publicKeyPem: config.publicKeyPem,
     privateKeyPem: config.privateKeyPem
   };

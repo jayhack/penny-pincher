@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createRequire } from "node:module";
 import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import { Command, Option } from "commander";
@@ -16,7 +17,9 @@ import {
   getUsage
 } from "./data.js";
 
-const cliVersion = "0.1.1";
+const require = createRequire(import.meta.url);
+const packageJson = require("../package.json") as { version: string };
+const cliVersion = packageJson.version;
 const program = new Command();
 
 class CliError extends Error {

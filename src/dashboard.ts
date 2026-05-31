@@ -414,11 +414,7 @@ function renderDashboardPage(): string {
           <div class="institutions" id="institutions"></div>
         </section>
 
-        <section class="dashboard-section" aria-labelledby="accounts-heading">
-          <div class="section-head">
-            <h2 class="label glyph-cell" id="accounts-heading">Current Accounts</h2>
-            <span class="mono-up label-aux" id="account-summary">balances · masks · account ids</span>
-          </div>
+        <section class="dashboard-section" aria-label="Accounts">
           <div id="accounts-view">
             <div id="accounts" class="provider-list" data-testid="accounts-grid"></div>
             <div id="empty" class="empty panel" hidden>
@@ -437,16 +433,17 @@ function renderDashboardPage(): string {
                 </svg>
                 <span>Accounts</span>
               </button>
-              <div class="transaction-title-wrap">
-                <h3 id="transaction-account-name" class="transaction-title">Transactions</h3>
-                <span id="transaction-account-meta" class="mono-up label-aux"></span>
-              </div>
+              <h3 id="transaction-account-name" class="transaction-title">Transactions</h3>
             </div>
             <div id="transaction-error" class="error-box" hidden></div>
             <div id="transaction-loading" class="transaction-loading panel" hidden>
               <span class="mono-up">Loading transactions</span>
             </div>
-            <div id="transaction-table-wrap" class="transaction-table-wrap panel" hidden>
+            <div id="transaction-table-wrap" class="transaction-table-wrap" hidden>
+              <div class="transaction-subhead">
+                <span id="transaction-account-meta" class="mono-up label-aux"></span>
+              </div>
+              <div class="transaction-table-scroll panel">
               <table class="transaction-table">
                 <colgroup>
                   <col class="transaction-col-date">
@@ -469,6 +466,7 @@ function renderDashboardPage(): string {
               <div id="transaction-empty" class="transaction-empty" hidden>
                 No recent transactions found for this account.
               </div>
+              </div>
             </div>
           </div>
         </section>
@@ -490,7 +488,6 @@ function renderDashboardPage(): string {
       const els = {
         refresh: document.getElementById("refresh"),
         error: document.getElementById("error"),
-        accountSummary: document.getElementById("account-summary"),
         statusPill: document.getElementById("status-pill"),
         statusText: document.getElementById("status-text"),
         institutions: document.getElementById("institutions"),
@@ -540,13 +537,25 @@ function renderDashboardPage(): string {
 
       function renderDashboard(payload) {
         const status = payload.status || {};
-        const groups = Array.isArray(payload.accountGroups) ? payload.accountGroups : [];
-        const accounts = groups.flatMap((group) => Array.isArray(group.accounts) ? group.accounts : []);
-
-        els.accountSummary.textContent = accountSummaryText(accounts.length, payload.generatedAt);
+        const groups = (Array.isArray(payload.accountGroups) ? payload.accountGroups : [])
+          .slice()
+          .sort((a, b) => groupBalanceTotal(b) - groupBalanceTotal(a));
 
         renderInstitutions(groups, status);
         renderAccounts(groups);
+      }
+
+      function groupBalanceTotal(group) {
+        const accounts = group && Array.isArray(group.accounts) ? group.accounts : [];
+        return accounts.reduce((sum, account) => {
+          const balances = (account && account.balances) || {};
+          const value = typeof balances.current === "number"
+            ? balances.current
+            : typeof balances.available === "number"
+              ? balances.available
+              : 0;
+          return sum + value;
+        }, 0);
       }
 
       function renderInstitutions(groups, status) {
@@ -605,7 +614,7 @@ function renderDashboardPage(): string {
         const toggle = document.createElement("span");
         toggle.className = "provider-chevron";
         toggle.setAttribute("aria-hidden", "true");
-        toggle.textContent = "−";
+        toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
         header.append(nameWrap, toggle);
 
@@ -622,7 +631,6 @@ function renderDashboardPage(): string {
           header.setAttribute("aria-expanded", expanded ? "false" : "true");
           accountsWrap.hidden = expanded;
           section.classList.toggle("is-collapsed", expanded);
-          toggle.textContent = expanded ? "+" : "−";
         });
 
         section.append(header, accountsWrap);
@@ -668,21 +676,16 @@ function renderDashboardPage(): string {
         balances.className = "balance-row";
         balances.append(
           renderBalance("Current", account.balances && account.balances.current, account.balances && account.balances.iso_currency_code),
-          renderBalance("Available", account.balances && account.balances.available, account.balances && account.balances.iso_currency_code)
+          renderBalance("Available", account.balances && account.balances.available, account.balances && account.balances.iso_currency_code, true)
         );
 
-        const accountId = document.createElement("div");
-        accountId.className = "account-id mono";
-        accountId.textContent = account.account_id || "";
-        accountId.title = account.account_id || "";
-
-        article.append(head, balances, accountId);
+        article.append(head, balances);
         return article;
       }
 
-      function renderBalance(label, value, currencyCode) {
+      function renderBalance(label, value, currencyCode, muted) {
         const box = document.createElement("div");
-        box.className = "balance";
+        box.className = muted ? "balance balance-muted" : "balance";
 
         const labelEl = document.createElement("span");
         labelEl.className = "balance-label mono-up";
@@ -712,7 +715,6 @@ function renderDashboardPage(): string {
         els.transactionEmpty.hidden = true;
         els.transactionRows.replaceChildren();
         els.transactionLoading.hidden = false;
-        els.accountSummary.textContent = "transactions · last 90 days";
         els.transactionsView.scrollIntoView({ block: "start" });
 
         try {
@@ -737,7 +739,6 @@ function renderDashboardPage(): string {
       function showAccountsView() {
         els.transactionsView.hidden = true;
         els.accountsView.hidden = false;
-        els.accountSummary.textContent = "balances · masks · account ids";
       }
 
       function renderTransactions(transactions) {
@@ -748,22 +749,26 @@ function renderDashboardPage(): string {
         for (const transaction of transactions) {
           const row = document.createElement("tr");
           row.append(
-            transactionCell(formatTransactionDate(transaction.date || transaction.authorized_date), "mono"),
-            transactionCell(transaction.merchant_name || transaction.name || "Transaction"),
-            transactionCell(transactionCategory(transaction)),
-            transactionCell(transaction.pending ? "Pending" : "Posted", "mono-up"),
-            transactionCell(formatTransactionAmount(transaction.amount, transaction.iso_currency_code), "is-number transaction-amount")
+            transactionCell(formatTransactionDate(transaction.date || transaction.authorized_date), "mono transaction-date"),
+            transactionCell(transaction.merchant_name || transaction.name || "Transaction", "transaction-desc", true),
+            transactionCell(transactionCategory(transaction), "transaction-category", true),
+            transactionCell(transaction.pending ? "Pending" : "Posted", "mono-up transaction-status"),
+            renderAmountCell(transaction.amount, transaction.iso_currency_code)
           );
           els.transactionRows.append(row);
         }
       }
 
-      function transactionCell(text, className) {
+      function transactionCell(text, className, withTitle) {
         const cell = document.createElement("td");
         if (className) {
           cell.className = className;
         }
-        cell.textContent = text || "-";
+        const value = text || "-";
+        cell.textContent = value;
+        if (withTitle && value !== "-") {
+          cell.title = value;
+        }
         return cell;
       }
 
@@ -797,14 +802,20 @@ function renderDashboardPage(): string {
         }).format(date);
       }
 
-      function formatTransactionAmount(value, currencyCode) {
+      function renderAmountCell(value, currencyCode) {
+        const cell = document.createElement("td");
+        cell.className = "is-number transaction-amount";
+
         if (typeof value !== "number" || !Number.isFinite(value)) {
-          return "-";
+          cell.textContent = "-";
+          return cell;
         }
 
-        const normalized = value > 0 ? -value : Math.abs(value);
-        const formatted = formatMoney(Math.abs(normalized), currencyCode);
-        return normalized < 0 ? "-" + formatted : "+" + formatted;
+        // Plaid: positive = money out (debit), negative = money in (credit).
+        const isInflow = value < 0;
+        cell.textContent = (isInflow ? "+" : "−") + formatMoney(Math.abs(value), currencyCode);
+        cell.classList.add(isInflow ? "is-positive" : "is-negative");
+        return cell;
       }
 
       function providerName(item) {
@@ -852,22 +863,6 @@ function renderDashboardPage(): string {
         }
       }
 
-      function formatDate(value) {
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
-          return value;
-        }
-
-        return new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short"
-        }).format(date);
-      }
-
-      function accountSummaryText(accountCount, generatedAt) {
-        const countText = accountCount === 1 ? "1 account" : accountCount + " accounts";
-        return generatedAt ? countText + " · updated " + formatDate(generatedAt) : countText;
-      }
     </script>
     <script>${CA_BG_SCRIPT}</script>
   </body>
@@ -949,6 +944,8 @@ const DASHBOARD_STYLES = `
     --deep:      #08163c;
     --glyph:     #0b0f22;
     --stone:     #757e96;
+    --gain:      #0f7a43;
+    --loss:      #c8341b;
   }
 
   * { box-sizing: border-box; }
@@ -1404,10 +1401,10 @@ const DASHBOARD_STYLES = `
 
   .provider-toggle {
     width: 100%;
-    min-height: 54px;
-    padding: 0;
+    min-height: 48px;
+    padding: 0 0 12px;
     border: 0;
-    border-bottom: 1.5px solid var(--glyph);
+    border-bottom: 1px solid rgba(11, 15, 34, 0.12);
     background: transparent;
     color: var(--glyph);
     display: flex;
@@ -1418,6 +1415,10 @@ const DASHBOARD_STYLES = `
     cursor: pointer;
   }
 
+  .provider-toggle:hover {
+    border-bottom-color: rgba(11, 15, 34, 0.3);
+  }
+
   .provider-toggle:hover .provider-title {
     color: var(--sovereign);
   }
@@ -1425,15 +1426,15 @@ const DASHBOARD_STYLES = `
   .provider-title-wrap {
     min-width: 0;
     display: flex;
-    align-items: baseline;
-    gap: 14px;
+    align-items: center;
+    gap: 12px;
     flex-wrap: wrap;
   }
 
   .provider-title {
     min-width: 0;
     font-family: "Inter", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-    font-size: clamp(1.35rem, 2.4vw, 1.9rem);
+    font-size: clamp(1.2rem, 2.1vw, 1.55rem);
     font-weight: 800;
     line-height: 1.15;
     overflow-wrap: anywhere;
@@ -1446,15 +1447,30 @@ const DASHBOARD_STYLES = `
 
   .provider-chevron {
     flex: 0 0 auto;
-    width: 30px;
-    height: 30px;
-    border: 1.5px solid var(--glyph);
-    border-radius: 2px;
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(11, 15, 34, 0.18);
+    border-radius: 50%;
     display: inline-grid;
     place-items: center;
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 17px;
-    line-height: 1;
+    color: var(--stone);
+    transition: transform 160ms ease, color 120ms ease, border-color 120ms ease, background 120ms ease;
+  }
+
+  .provider-chevron svg {
+    width: 14px;
+    height: 14px;
+    display: block;
+  }
+
+  .provider-toggle:hover .provider-chevron {
+    color: var(--glyph);
+    border-color: var(--glyph);
+    background: var(--lattice);
+  }
+
+  .provider-toggle[aria-expanded="false"] .provider-chevron {
+    transform: rotate(-90deg);
   }
 
   .provider-group.is-collapsed {
@@ -1468,11 +1484,10 @@ const DASHBOARD_STYLES = `
   }
 
   .account {
-    min-height: 190px;
     padding: 18px;
     display: grid;
-    grid-template-rows: auto 1fr auto;
-    gap: 18px;
+    grid-template-rows: auto auto;
+    gap: 16px;
     color: var(--glyph);
     text-align: left;
     cursor: pointer;
@@ -1501,9 +1516,9 @@ const DASHBOARD_STYLES = `
   .account-name {
     margin: 0;
     font-family: "Inter", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-    font-size: clamp(1.18rem, 2.15vw, 1.55rem);
-    font-weight: 800;
-    line-height: 1.15;
+    font-size: clamp(1.02rem, 1.7vw, 1.2rem);
+    font-weight: 700;
+    line-height: 1.2;
     letter-spacing: 0;
     color: var(--glyph);
     overflow-wrap: anywhere;
@@ -1541,26 +1556,25 @@ const DASHBOARD_STYLES = `
   .balance-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0;
-    border-top: 1px solid rgba(11, 15, 34, 0.15);
-    border-bottom: 1px solid rgba(11, 15, 34, 0.15);
+    gap: 16px;
+    padding: 14px 16px;
+    border-radius: 4px;
+    background: rgba(20, 42, 92, 0.055);
   }
 
   .balance {
     min-width: 0;
-    padding: 14px 14px 14px 0;
-  }
-
-  .balance + .balance {
-    border-left: 1px solid rgba(11, 15, 34, 0.15);
-    padding-left: 14px;
   }
 
   .balance-label {
     display: block;
     color: var(--stone);
     font-size: 10px;
-    margin-bottom: 7px;
+    margin-bottom: 6px;
+  }
+
+  .balance-muted .balance-label {
+    color: rgba(117, 126, 150, 0.8);
   }
 
   .balance-value {
@@ -1572,13 +1586,11 @@ const DASHBOARD_STYLES = `
     overflow-wrap: anywhere;
   }
 
-  .account-id {
+  .balance-muted .balance-value {
+    font-family: "Inter", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 600;
+    font-size: clamp(1rem, 1.7vw, 1.2rem);
     color: var(--stone);
-    font-size: 11px;
-    line-height: 1.5;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .transactions-view {
@@ -1587,23 +1599,31 @@ const DASHBOARD_STYLES = `
   }
 
   .transaction-toolbar {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    display: flex;
     align-items: center;
     gap: 16px;
   }
 
-  .transaction-title-wrap {
+  .transaction-title {
+    margin: 0;
     min-width: 0;
+    font-family: "Archivo Black", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 900;
+    letter-spacing: -0.015em;
+    font-size: clamp(1.5rem, 3vw, 2.2rem);
+    line-height: 1;
+    overflow-wrap: anywhere;
   }
 
-  .transaction-title {
-    margin: 0 0 6px;
-    font-family: "Inter", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-    font-size: clamp(1.25rem, 2.4vw, 1.8rem);
-    font-weight: 800;
-    line-height: 1.15;
-    overflow-wrap: anywhere;
+  .transaction-subhead {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+  }
+
+  .transaction-subhead .label-aux {
+    color: var(--stone);
+    font-size: 10px;
   }
 
   .transaction-loading {
@@ -1615,6 +1635,10 @@ const DASHBOARD_STYLES = `
   }
 
   .transaction-table-wrap {
+    min-width: 0;
+  }
+
+  .transaction-table-scroll {
     overflow-x: auto;
   }
 
@@ -1644,40 +1668,68 @@ const DASHBOARD_STYLES = `
 
   .transaction-table th,
   .transaction-table td {
-    padding: 14px 16px;
-    border-bottom: 1px solid rgba(11, 15, 34, 0.15);
-    vertical-align: top;
+    padding: 13px 16px;
+    vertical-align: middle;
   }
 
-  .transaction-table th {
-    color: var(--stone);
+  .transaction-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--glyph);
+    color: var(--bloom);
     font-family: "JetBrains Mono", ui-monospace, monospace;
     font-size: 10px;
-    font-weight: 500;
+    font-weight: 700;
     letter-spacing: 0.16em;
     text-align: left;
     text-transform: uppercase;
   }
 
-  .transaction-table td {
+  .transaction-table tbody td {
     font-size: 14px;
     line-height: 1.45;
+    border-top: 1px solid rgba(11, 15, 34, 0.1);
   }
 
-  .transaction-table th:nth-child(1),
-  .transaction-table td:nth-child(1),
-  .transaction-table th:nth-child(4),
-  .transaction-table td:nth-child(4) {
-    white-space: nowrap;
+  .transaction-table tbody tr:first-child td {
+    border-top: 0;
   }
 
-  .transaction-table td:nth-child(2),
-  .transaction-table td:nth-child(3) {
-    overflow-wrap: anywhere;
+  .transaction-table tbody tr:nth-child(even) {
+    background: rgba(251, 244, 236, 0.45);
   }
 
   .transaction-table tbody tr:hover {
     background: var(--lattice);
+  }
+
+  .transaction-date {
+    color: var(--stone);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .transaction-desc {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .transaction-category {
+    color: var(--stone);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .transaction-status {
+    color: var(--stone);
+    font-size: 9.5px;
+    white-space: nowrap;
   }
 
   .transaction-table .is-number {
@@ -1686,7 +1738,18 @@ const DASHBOARD_STYLES = `
   }
 
   .transaction-amount {
-    font-weight: 800;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  .transaction-amount.is-positive {
+    color: var(--gain);
+  }
+
+  .transaction-amount.is-negative {
+    color: var(--loss);
   }
 
   .transaction-empty {
@@ -1855,12 +1918,6 @@ const DASHBOARD_STYLES = `
     .account-type {
       max-width: 100%;
       justify-self: start;
-    }
-
-    .balance + .balance {
-      border-left: 0;
-      border-top: 1px solid rgba(11, 15, 34, 0.15);
-      padding-left: 0;
     }
   }
 `;

@@ -64,18 +64,19 @@ export function createSignedRequest<TPayload>(
     privateKeyPem: string;
   }
 ): SignedRequest<TPayload> {
+  const payload = jsonSerializablePayload(options.payload);
   const timestamp = new Date().toISOString();
   const nonce = randomUUID();
   const canonical = canonicalRequest({
     method: options.method,
     path: options.path,
-    payload: options.payload,
+    payload,
     timestamp,
     nonce
   });
 
   return {
-    payload: options.payload,
+    payload,
     timestamp,
     nonce,
     signature: sign(null, Buffer.from(canonical), options.privateKeyPem).toString("base64url")
@@ -240,6 +241,11 @@ function stableStringify(value: unknown): string {
     .sort()
     .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
     .join(",")}}`;
+}
+
+function jsonSerializablePayload<TPayload>(payload: TPayload): TPayload {
+  const serialized = JSON.stringify(payload);
+  return serialized === undefined ? payload : JSON.parse(serialized) as TPayload;
 }
 
 function deriveEncryptionKey(secret: string): Buffer {

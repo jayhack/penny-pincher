@@ -51,7 +51,7 @@ npx -p penny-pincher penny-pincher auth --env sandbox
 
 - `penny-pincher auth` opens Plaid Link, exchanges the public token through the backend, and adds or refreshes one linked institution. It requests 730 days of transaction history by default; use `--history-days <days>` to change that for new Items.
 - `penny-pincher accounts` prints linked accounts.
-- `penny-pincher dashboard` starts a local dashboard server. The net worth chart reads from the encrypted SQLite cache.
+- `penny-pincher dashboard` starts a local dashboard server with linked accounts and account-level transactions.
 - `penny-pincher balances` prints accounts with balances.
 - `penny-pincher transactions --days 30` prints recent transactions.
 - `penny-pincher recurring` prints Plaid recurring inflow and outflow streams.

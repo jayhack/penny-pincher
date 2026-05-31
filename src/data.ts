@@ -58,11 +58,18 @@ export async function getBalances() {
   return results.flat();
 }
 
-export async function getTransactions(options: { startDate: string; endDate: string; count: number }) {
+export async function getTransactions(options: { startDate: string; endDate: string; count: number; accountIds?: string[] }) {
   const context = await linkedContext();
   const results = await Promise.all(context.items.map((item) => getTransactionsForItem(context.config, item, options)));
   const transactions = results
     .flatMap((result) => result.transactions)
+    .filter((transaction) => {
+      if (!options.accountIds?.length) {
+        return true;
+      }
+
+      return options.accountIds.includes(stringValue(transaction.account_id) ?? stringValue(transaction.accountId) ?? "");
+    })
     .sort((left, right) => transactionDate(right).localeCompare(transactionDate(left)))
     .slice(0, options.count);
 
@@ -70,6 +77,54 @@ export async function getTransactions(options: { startDate: string; endDate: str
     accounts: results.flatMap((result) => result.accounts),
     transactions,
     totalTransactions: results.reduce((total, result) => total + result.totalTransactions, 0)
+  };
+}
+
+export async function getTransactionsForAccount(options: {
+  accountId: string;
+  startDate: string;
+  endDate: string;
+  count: number;
+}) {
+  const context = await linkedContext();
+  const accountGroups = await Promise.all(
+    context.items.map(async (item) => ({
+      item,
+      accounts: await getAccountsForItem(context.config, item)
+    }))
+  );
+  const match = accountGroups.find((group) => {
+    return group.accounts.some((account) => {
+      if (!isRecord(account)) {
+        return false;
+      }
+
+      return stringValue(account.account_id) === options.accountId || stringValue(account.accountId) === options.accountId;
+    });
+  });
+
+  if (!match) {
+    throw new Error(`No linked account found for account_id ${options.accountId}.`);
+  }
+
+  const result = await getTransactionsForItem(context.config, match.item, {
+    startDate: options.startDate,
+    endDate: options.endDate,
+    count: options.count,
+    accountIds: [options.accountId]
+  });
+  const transactions = result.transactions
+    .filter((transaction) => {
+      return options.accountId === (stringValue(transaction.account_id) ?? stringValue(transaction.accountId) ?? "");
+    })
+    .sort((left, right) => transactionDate(right).localeCompare(transactionDate(left)))
+    .slice(0, options.count);
+
+  return {
+    item: publicLinkedItem(context.config, match.item),
+    accounts: result.accounts,
+    transactions,
+    totalTransactions: transactions.length
   };
 }
 
@@ -183,7 +238,7 @@ async function getBalancesForItem(config: PennyPincherConfig, item: LinkedAccoun
 async function getTransactionsForItem(
   config: PennyPincherConfig,
   item: LinkedAccountItem,
-  options: { startDate: string; endDate: string; count: number }
+  options: { startDate: string; endDate: string; count: number; accountIds?: string[] }
 ): Promise<TransactionResult> {
   if (item.mode === "hosted") {
     const result = await hostedRequest<unknown>(config, item, "transactions", options);
@@ -196,6 +251,7 @@ async function getTransactionsForItem(
     start_date: options.startDate,
     end_date: options.endDate,
     options: {
+      account_ids: options.accountIds,
       count: options.count
     }
   });

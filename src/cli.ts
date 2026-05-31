@@ -56,7 +56,7 @@ program
 Local SQLite cache:
   penny-pincher sync       Hydrates ~/.penny-pincher/penny.db from Plaid/backend.
   penny-pincher cache ...  Reads the encrypted local cache without calling Plaid.
-  penny-pincher dashboard  Reads the cache for the net worth chart; it does not sync automatically.
+  penny-pincher dashboard  Opens a local dashboard of linked accounts and transactions.
 
 If the SQLite DB is deleted, run penny-pincher sync to rebuild it. The cache key lives in ~/.penny-pincher/config.json.
 `);
@@ -126,7 +126,7 @@ program
 
 program
   .command("dashboard")
-  .description("Open a local dashboard; net worth reads from the encrypted SQLite cache.")
+  .description("Open a local dashboard of linked accounts and transactions.")
   .option("--port <port>", "Local dashboard server port.", parsePort, 7778)
   .option("--no-open", "Print the dashboard URL without opening a browser.")
   .addOption(jsonOption())

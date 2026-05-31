@@ -17,7 +17,7 @@ import {
   resolveBackendUrl
 } from "./backend.js";
 import { generateSigningKeyPair } from "./crypto.js";
-import { getAccountGroups, getStatus } from "./data.js";
+import { getAccountGroups, getStatus, getTransactionsForAccount } from "./data.js";
 
 export interface DashboardOptions {
   port: number;
@@ -158,6 +158,33 @@ export async function startDashboard(options: DashboardOptions): Promise<Dashboa
     }
   });
 
+  app.get("/api/account-transactions", async (request, response) => {
+    try {
+      const accountId = stringQuery(request.query.account_id ?? request.query.accountId);
+
+      if (!accountId) {
+        response.status(400).json({ ok: false, error: { message: "Missing account_id" } });
+        return;
+      }
+
+      response.json({
+        ok: true,
+        ...(await accountTransactionsPayload({
+          accountId,
+          days: integerQuery(request.query.days, 90),
+          count: integerQuery(request.query.count, 500)
+        }))
+      });
+    } catch (error) {
+      response.status(500).json({
+        ok: false,
+        error: {
+          message: error instanceof Error ? error.message : "Unknown transactions error"
+        }
+      });
+    }
+  });
+
   const server = await listen(app, options.port);
   const url = `http://localhost:${options.port}`;
   const result: DashboardServer = {
@@ -279,6 +306,27 @@ function stringListQuery(value: unknown): string[] | undefined {
     .filter(Boolean);
 }
 
+function integerQuery(value: unknown, fallback: number): number {
+  const text = stringQuery(value);
+
+  if (!text || !/^\d+$/.test(text)) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(text, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysBefore(endDate: string, days: number): string {
+  const date = new Date(`${endDate}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
 async function dashboardPayload() {
   const status = await getStatus();
   const accountGroups = status.linked ? await getAccountGroups() : [];
@@ -289,6 +337,25 @@ async function dashboardPayload() {
     generatedAt: new Date().toISOString(),
     accountGroups,
     accounts: accountGroups.flatMap((group) => group.accounts)
+  };
+}
+
+async function accountTransactionsPayload(options: { accountId: string; days: number; count: number }) {
+  const endDate = today();
+  const startDate = daysBefore(endDate, options.days);
+  const result = await getTransactionsForAccount({
+    accountId: options.accountId,
+    startDate,
+    endDate,
+    count: options.count
+  });
+
+  return {
+    accountId: options.accountId,
+    startDate,
+    endDate,
+    transactions: result.transactions,
+    totalTransactions: result.transactions.length
   };
 }
 
@@ -352,12 +419,56 @@ function renderDashboardPage(): string {
             <h2 class="label glyph-cell" id="accounts-heading">Current Accounts</h2>
             <span class="mono-up label-aux" id="account-summary">balances · masks · account ids</span>
           </div>
-          <div id="accounts" class="provider-list" data-testid="accounts-grid"></div>
-          <div id="empty" class="empty panel" hidden>
-            <div>
-              <strong>No linked accounts found</strong>
-              <span>Connect a bank account, then refresh this dashboard.</span>
-              <code class="mono">penny-pincher auth</code>
+          <div id="accounts-view">
+            <div id="accounts" class="provider-list" data-testid="accounts-grid"></div>
+            <div id="empty" class="empty panel" hidden>
+              <div>
+                <strong>No linked accounts found</strong>
+                <span>Connect a bank account, then refresh this dashboard.</span>
+                <code class="mono">penny-pincher auth</code>
+              </div>
+            </div>
+          </div>
+          <div id="transactions-view" class="transactions-view" hidden>
+            <div class="transaction-toolbar">
+              <button type="button" id="back-to-accounts" class="btn-secondary btn-compact">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M19 12H5M12 19l-7-7 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Accounts</span>
+              </button>
+              <div class="transaction-title-wrap">
+                <h3 id="transaction-account-name" class="transaction-title">Transactions</h3>
+                <span id="transaction-account-meta" class="mono-up label-aux"></span>
+              </div>
+            </div>
+            <div id="transaction-error" class="error-box" hidden></div>
+            <div id="transaction-loading" class="transaction-loading panel" hidden>
+              <span class="mono-up">Loading transactions</span>
+            </div>
+            <div id="transaction-table-wrap" class="transaction-table-wrap panel" hidden>
+              <table class="transaction-table">
+                <colgroup>
+                  <col class="transaction-col-date">
+                  <col>
+                  <col class="transaction-col-category">
+                  <col class="transaction-col-status">
+                  <col class="transaction-col-amount">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th class="is-number">Amount</th>
+                  </tr>
+                </thead>
+                <tbody id="transaction-rows"></tbody>
+              </table>
+              <div id="transaction-empty" class="transaction-empty" hidden>
+                No recent transactions found for this account.
+              </div>
             </div>
           </div>
         </section>
@@ -383,11 +494,22 @@ function renderDashboardPage(): string {
         statusPill: document.getElementById("status-pill"),
         statusText: document.getElementById("status-text"),
         institutions: document.getElementById("institutions"),
+        accountsView: document.getElementById("accounts-view"),
         accounts: document.getElementById("accounts"),
-        empty: document.getElementById("empty")
+        empty: document.getElementById("empty"),
+        transactionsView: document.getElementById("transactions-view"),
+        backToAccounts: document.getElementById("back-to-accounts"),
+        transactionAccountName: document.getElementById("transaction-account-name"),
+        transactionAccountMeta: document.getElementById("transaction-account-meta"),
+        transactionError: document.getElementById("transaction-error"),
+        transactionLoading: document.getElementById("transaction-loading"),
+        transactionTableWrap: document.getElementById("transaction-table-wrap"),
+        transactionRows: document.getElementById("transaction-rows"),
+        transactionEmpty: document.getElementById("transaction-empty")
       };
 
       els.refresh.addEventListener("click", loadDashboard);
+      els.backToAccounts.addEventListener("click", showAccountsView);
       loadDashboard();
 
       async function loadDashboard() {
@@ -508,9 +630,16 @@ function renderDashboardPage(): string {
       }
 
       function renderAccount(account, item) {
-        const article = document.createElement("article");
+        const article = document.createElement("button");
+        article.type = "button";
         article.className = "account panel";
         article.dataset.testid = "account-card";
+        article.disabled = !account.account_id;
+        article.addEventListener("click", () => {
+          if (account.account_id) {
+            showTransactions(account, item);
+          }
+        });
 
         const head = document.createElement("div");
         head.className = "account-head";
@@ -565,6 +694,117 @@ function renderDashboardPage(): string {
 
         box.append(labelEl, valueEl);
         return box;
+      }
+
+      async function showTransactions(account, item) {
+        const accountId = account.account_id;
+        els.accountsView.hidden = true;
+        els.transactionsView.hidden = false;
+        els.transactionAccountName.textContent = account.name || account.official_name || "Account";
+        els.transactionAccountMeta.textContent = [
+          providerName(item),
+          account.mask ? "ending " + account.mask : "",
+          "last 90 days"
+        ].filter(Boolean).join(" · ");
+        els.transactionError.hidden = true;
+        els.transactionError.textContent = "";
+        els.transactionTableWrap.hidden = true;
+        els.transactionEmpty.hidden = true;
+        els.transactionRows.replaceChildren();
+        els.transactionLoading.hidden = false;
+        els.accountSummary.textContent = "transactions · last 90 days";
+        els.transactionsView.scrollIntoView({ block: "start" });
+
+        try {
+          const response = await fetch("/api/account-transactions?account_id=" + encodeURIComponent(accountId), {
+            cache: "no-store"
+          });
+          const body = await response.json();
+
+          if (!response.ok || !body.ok) {
+            throw new Error(body && body.error && body.error.message ? body.error.message : "Transaction request failed");
+          }
+
+          renderTransactions(Array.isArray(body.transactions) ? body.transactions : []);
+        } catch (error) {
+          els.transactionError.textContent = error && error.message ? error.message : String(error);
+          els.transactionError.hidden = false;
+        } finally {
+          els.transactionLoading.hidden = true;
+        }
+      }
+
+      function showAccountsView() {
+        els.transactionsView.hidden = true;
+        els.accountsView.hidden = false;
+        els.accountSummary.textContent = "balances · masks · account ids";
+      }
+
+      function renderTransactions(transactions) {
+        els.transactionRows.replaceChildren();
+        els.transactionEmpty.hidden = transactions.length !== 0;
+        els.transactionTableWrap.hidden = false;
+
+        for (const transaction of transactions) {
+          const row = document.createElement("tr");
+          row.append(
+            transactionCell(formatTransactionDate(transaction.date || transaction.authorized_date), "mono"),
+            transactionCell(transaction.merchant_name || transaction.name || "Transaction"),
+            transactionCell(transactionCategory(transaction)),
+            transactionCell(transaction.pending ? "Pending" : "Posted", "mono-up"),
+            transactionCell(formatTransactionAmount(transaction.amount, transaction.iso_currency_code), "is-number transaction-amount")
+          );
+          els.transactionRows.append(row);
+        }
+      }
+
+      function transactionCell(text, className) {
+        const cell = document.createElement("td");
+        if (className) {
+          cell.className = className;
+        }
+        cell.textContent = text || "-";
+        return cell;
+      }
+
+      function transactionCategory(transaction) {
+        const pfc = transaction.personal_finance_category;
+        if (pfc && typeof pfc === "object") {
+          return pfc.detailed || pfc.primary || "Uncategorized";
+        }
+
+        if (Array.isArray(transaction.category) && transaction.category.length) {
+          return transaction.category.join(" / ");
+        }
+
+        return "Uncategorized";
+      }
+
+      function formatTransactionDate(value) {
+        if (typeof value !== "string") {
+          return "-";
+        }
+
+        const date = new Date(value + "T00:00:00");
+        if (Number.isNaN(date.getTime())) {
+          return value;
+        }
+
+        return new Intl.DateTimeFormat(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric"
+        }).format(date);
+      }
+
+      function formatTransactionAmount(value, currencyCode) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          return "-";
+        }
+
+        const normalized = value > 0 ? -value : Math.abs(value);
+        const formatted = formatMoney(Math.abs(normalized), currencyCode);
+        return normalized < 0 ? "-" + formatted : "+" + formatted;
       }
 
       function providerName(item) {
@@ -1233,6 +1473,22 @@ const DASHBOARD_STYLES = `
     display: grid;
     grid-template-rows: auto 1fr auto;
     gap: 18px;
+    color: var(--glyph);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .account:hover {
+    background: rgba(251, 244, 236, 0.72);
+  }
+
+  .account:focus-visible {
+    outline: 2px solid var(--spark);
+    outline-offset: 3px;
+  }
+
+  .account:disabled {
+    cursor: default;
   }
 
   .account-head {
@@ -1323,6 +1579,121 @@ const DASHBOARD_STYLES = `
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .transactions-view {
+    display: grid;
+    gap: 18px;
+  }
+
+  .transaction-toolbar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
+  }
+
+  .transaction-title-wrap {
+    min-width: 0;
+  }
+
+  .transaction-title {
+    margin: 0 0 6px;
+    font-family: "Inter", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: clamp(1.25rem, 2.4vw, 1.8rem);
+    font-weight: 800;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  .transaction-loading {
+    min-height: 120px;
+    display: grid;
+    place-items: center;
+    color: var(--stone);
+    font-size: 10px;
+  }
+
+  .transaction-table-wrap {
+    overflow-x: auto;
+  }
+
+  .transaction-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+    border-collapse: collapse;
+    background: var(--paper);
+  }
+
+  .transaction-col-date {
+    width: 116px;
+  }
+
+  .transaction-col-category {
+    width: 188px;
+  }
+
+  .transaction-col-status {
+    width: 96px;
+  }
+
+  .transaction-col-amount {
+    width: 124px;
+  }
+
+  .transaction-table th,
+  .transaction-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(11, 15, 34, 0.15);
+    vertical-align: top;
+  }
+
+  .transaction-table th {
+    color: var(--stone);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .transaction-table td {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .transaction-table th:nth-child(1),
+  .transaction-table td:nth-child(1),
+  .transaction-table th:nth-child(4),
+  .transaction-table td:nth-child(4) {
+    white-space: nowrap;
+  }
+
+  .transaction-table td:nth-child(2),
+  .transaction-table td:nth-child(3) {
+    overflow-wrap: anywhere;
+  }
+
+  .transaction-table tbody tr:hover {
+    background: var(--lattice);
+  }
+
+  .transaction-table .is-number {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .transaction-amount {
+    font-weight: 800;
+  }
+
+  .transaction-empty {
+    padding: 24px;
+    color: var(--stone);
+    font-size: 14px;
+    text-align: center;
   }
 
   .empty {
@@ -1443,6 +1814,32 @@ const DASHBOARD_STYLES = `
     .account-head,
     .balance-row {
       grid-template-columns: 1fr;
+    }
+
+    .transaction-toolbar {
+      grid-template-columns: 1fr;
+      align-items: start;
+    }
+
+    .transaction-col-date {
+      width: 96px;
+    }
+
+    .transaction-col-category {
+      width: 132px;
+    }
+
+    .transaction-col-status {
+      width: 82px;
+    }
+
+    .transaction-col-amount {
+      width: 102px;
+    }
+
+    .transaction-table th,
+    .transaction-table td {
+      padding: 12px 10px;
     }
 
     .provider-toggle {

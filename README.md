@@ -49,7 +49,7 @@ npx -p penny-pincher penny-pincher auth --env sandbox
 
 - `penny-pincher auth` opens Plaid Link, exchanges the public token through the backend, and adds or refreshes one linked institution.
 - `penny-pincher accounts` prints linked accounts.
-- `penny-pincher dashboard` starts a local dashboard server and opens the current linked accounts.
+- `penny-pincher dashboard` starts a local dashboard server with linked accounts and account-level transactions.
 - `penny-pincher balances` prints accounts with balances.
 - `penny-pincher transactions --days 30` prints recent transactions.
 - `penny-pincher recurring` prints Plaid recurring inflow and outflow streams.

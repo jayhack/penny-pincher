@@ -41,7 +41,8 @@ const exchangePayloadSchema = z.object({
 const transactionsPayloadSchema = z.object({
   startDate: z.string(),
   endDate: z.string(),
-  count: z.number().int().positive().max(500).default(100)
+  count: z.number().int().positive().max(500).default(100),
+  accountIds: z.array(z.string()).optional()
 });
 const recurringPayloadSchema = z.object({
   accountIds: z.array(z.string()).optional()
@@ -176,6 +177,7 @@ async function callPlaidDataEndpoint(
       start_date: options.startDate,
       end_date: options.endDate,
       options: {
+        account_ids: options.accountIds,
         count: options.count
       }
     });

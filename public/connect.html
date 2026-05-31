@@ -141,8 +141,8 @@
         letter-spacing: -0.02em;
         line-height: 0.95;
         color: var(--glyph);
-        font-size: clamp(2.25rem, 6vw, 3.75rem);
-        text-shadow: 3px 3px 0 var(--bloom);
+        font-size: clamp(1.9rem, 5vw, 3rem);
+        text-shadow: 2px 2px 0 var(--bloom);
         margin: 0;
       }
 
@@ -155,80 +155,85 @@
         font-weight: 500;
       }
 
-      .actions {
-        margin-top: 32px;
+      /* directive CTA — the focal, interactive next-step indicator */
+      .cta-wrap {
+        margin-top: 36px;
+        max-width: 540px;
+      }
+      .cta {
+        width: 100%;
         display: flex;
         align-items: center;
-        gap: 16px;
-        flex-wrap: wrap;
-      }
-
-      .btn-primary {
-        background: linear-gradient(180deg, #142a5c 0%, #08163c 100%);
-        color: #fff;
-        padding: 18px 32px;
-        border: 0;
-        border-radius: 2px;
-        font-family: "JetBrains Mono", monospace;
-        text-transform: uppercase;
-        letter-spacing: 0.16em;
-        font-size: 14px;
-        font-weight: 700;
-        display: inline-flex;
-        align-items: center;
-        gap: 12px;
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.18),
-          0 3px 0 var(--bloom);
-        transition: transform 80ms ease, box-shadow 80ms ease, background 80ms ease;
-        cursor: pointer;
-        text-decoration: none;
-      }
-      .btn-primary:hover {
-        background: linear-gradient(180deg, #1f3d7f 0%, #0f2050 100%);
-      }
-      .btn-primary:active {
-        transform: translateY(2px);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
-      }
-      .btn-primary:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none;
-      }
-
-      /* status pill — switches between idle / live / success / error */
-      .status {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        padding: 9px 14px;
-        border: 1px solid var(--glyph);
-        border-radius: 2px;
+        gap: 18px;
+        text-align: left;
+        padding: 24px 26px;
+        border: 2px solid var(--glyph);
+        border-radius: 3px;
         background: var(--paper);
-        font-family: "JetBrains Mono", monospace;
-        font-size: 10.5px;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: var(--glyph);
+        box-shadow: 6px 6px 0 var(--bloom);
+        cursor: pointer;
+        font-family: "Inter", sans-serif;
+        transition: transform 90ms ease, box-shadow 90ms ease;
       }
-      .status .dot {
-        display: inline-block;
-        width: 8px;
-        height: 8px;
-        border-radius: 1px;
+      .cta:hover  { transform: translate(-1px, -1px); box-shadow: 8px 8px 0 var(--bloom); }
+      .cta:active { transform: translate(3px, 3px);   box-shadow: 2px 2px 0 var(--bloom); }
+      .cta:focus-visible { outline: 3px solid var(--spark); outline-offset: 4px; }
+
+      .cta-dot {
+        flex: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
         background: var(--spark);
+        box-shadow: 0 0 0 5px rgba(224, 74, 20, 0.16);
         animation: pulse 1.4s ease-in-out infinite;
       }
-      .status.is-success .dot { background: var(--sovereign); animation: none; }
-      .status.is-error   .dot { background: var(--spark); animation: none; }
-      .status.is-idle    .dot { background: var(--stone); animation: none; }
+      .cta-text {
+        flex: 1;
+        font-size: 19px;
+        font-weight: 700;
+        line-height: 1.3;
+        letter-spacing: -0.01em;
+        color: var(--glyph);
+      }
+      .cta-arrow {
+        flex: none;
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1;
+        color: var(--spark);
+        transition: transform 90ms ease;
+      }
+      .cta:hover .cta-arrow { transform: translateX(4px); }
+
+      /* in-progress */
+      .cta.is-busy,
+      .cta.is-busy:hover { cursor: progress; transform: none; box-shadow: 6px 6px 0 var(--bloom); }
+      .cta.is-busy .cta-dot { background: var(--pulse); box-shadow: 0 0 0 5px rgba(208, 132, 84, 0.18); }
+
+      /* success */
+      .cta.is-success,
+      .cta.is-success:hover { cursor: default; transform: none; border-color: var(--sovereign); box-shadow: 6px 6px 0 var(--sovereign); }
+      .cta.is-success .cta-dot   { background: var(--sovereign); box-shadow: 0 0 0 5px rgba(20, 42, 92, 0.14); animation: none; }
+      .cta.is-success .cta-text  { color: var(--sovereign); }
+      .cta.is-success .cta-arrow { color: var(--sovereign); }
+
+      /* error (retryable) */
+      .cta.is-error .cta-dot { background: var(--spark); animation: none; }
+
+      /* disabled (no session) */
+      .cta.is-disabled,
+      .cta.is-disabled:hover { cursor: not-allowed; transform: none; opacity: 0.55; box-shadow: 4px 4px 0 var(--bloom); }
+      .cta.is-disabled .cta-dot { background: var(--stone); box-shadow: none; animation: none; }
+
+      .cta[data-arrow="off"] .cta-arrow { display: none; }
+
       @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.3; }
       }
       @media (prefers-reduced-motion: reduce) {
-        .status .dot { animation: none; }
+        .cta-dot { animation: none; }
       }
 
       .telemetry {
@@ -354,9 +359,12 @@
           Tokens are never stored — the CLI picks things up automatically.
         </p>
 
-        <div class="actions">
-          <button type="button" id="open" class="btn-primary">Open Plaid Link →</button>
-          <span id="status" class="status"><span class="dot"></span><span id="status-text">Ready</span></span>
+        <div class="cta-wrap">
+          <button type="button" id="cta" class="cta">
+            <span class="cta-dot" aria-hidden="true"></span>
+            <span class="cta-text" id="status-text">Open Plaid Link to choose your bank</span>
+            <span class="cta-arrow" id="cta-arrow" aria-hidden="true">→</span>
+          </button>
         </div>
 
         <div id="ink" class="ink" hidden>
@@ -385,19 +393,23 @@
 
     <script>
       const params = new URLSearchParams(window.location.search);
-      const statusEl  = document.getElementById("status");
+      const cta       = document.getElementById("cta");
       const statusTxt = document.getElementById("status-text");
-      const openBtn   = document.getElementById("open");
       const ink       = document.getElementById("ink");
       const inkLabel  = document.getElementById("ink-label");
       const inkBody   = document.getElementById("ink-body");
 
-      function setStatus(text, kind) {
+      let ctaAction = null;
+      cta.addEventListener("click", () => { if (ctaAction) ctaAction(); });
+
+      // Drive the focal directive: headline + state + whether it's clickable.
+      function setCTA({ text, state, action }) {
         statusTxt.textContent = text;
-        statusEl.classList.remove("is-success", "is-error", "is-idle");
-        if (kind === "success") statusEl.classList.add("is-success");
-        if (kind === "error")   statusEl.classList.add("is-error");
-        if (kind === "idle")    statusEl.classList.add("is-idle");
+        cta.classList.remove("is-busy", "is-success", "is-error", "is-disabled");
+        if (state) cta.classList.add(state);
+        ctaAction = action || null;
+        cta.disabled = !action;
+        cta.setAttribute("data-arrow", action ? "on" : "off");
       }
 
       function showInk(label, body) {
@@ -419,16 +431,14 @@
       if (params.get("callback"))   window.localStorage.setItem("pennypincher_callback",   params.get("callback"));
 
       if (!linkToken || !callback) {
-        setStatus("No auth session", "error");
-        openBtn.disabled = true;
+        setCTA({ text: "No active session — run npx penny-pincher auth", state: "is-disabled", action: null });
         showInk("Missing session", "No active Penny-Pincher auth session was found in this tab.\nRun `npx penny-pincher auth` in your terminal to start one.");
       } else {
-        setStatus("Ready", "idle");
         const handler = Plaid.create({
           token: linkToken,
           receivedRedirectUri: window.location.pathname === "/oauth-return" ? window.location.href : undefined,
           onSuccess: async (public_token, metadata) => {
-            setStatus("Exchanging token", null);
+            setCTA({ text: "Connecting your bank…", state: "is-busy", action: null });
             try {
               const response = await fetch(callback, {
                 method: "POST",
@@ -437,29 +447,29 @@
               });
               const body = await response.json();
               if (response.ok) {
-                setStatus("Connected · back to your terminal", "success");
+                setCTA({ text: "Connected — return to your terminal", state: "is-success", action: null });
                 window.localStorage.removeItem("pennypincher_link_token");
                 window.localStorage.removeItem("pennypincher_callback");
               } else {
-                setStatus("Token exchange failed", "error");
+                setCTA({ text: "Couldn't finish — click to retry", state: "is-error", action: () => handler.open() });
                 showInk("Exchange error", body);
               }
             } catch (err) {
-              setStatus("Network error", "error");
+              setCTA({ text: "Network error — click to retry", state: "is-error", action: () => handler.open() });
               showInk("Exchange error", String(err && err.message ? err.message : err));
             }
           },
           onExit: (error) => {
             if (error) {
-              setStatus("Plaid Link error", "error");
+              setCTA({ text: "Plaid Link hit a snag — click to retry", state: "is-error", action: () => handler.open() });
               showInk("Plaid onExit", error);
             } else {
-              setStatus("Closed · click to reopen", "idle");
+              setCTA({ text: "Open Plaid Link to choose your bank", state: null, action: () => handler.open() });
             }
           }
         });
 
-        openBtn.addEventListener("click", () => handler.open());
+        setCTA({ text: "Open Plaid Link to choose your bank", state: null, action: () => handler.open() });
       }
     </script>
 

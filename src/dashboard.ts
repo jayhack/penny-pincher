@@ -338,6 +338,7 @@ function renderDashboardPage(): string {
       </header>
 
       <main>
+        <!-- Net Worth chart temporarily disabled (kept for easy re-enable; see renderNetWorth/drawNetWorthChart below).
         <section class="dashboard-section dashboard-section-first" aria-labelledby="net-worth-heading">
           <div class="section-head net-worth-head">
             <div>
@@ -358,8 +359,9 @@ function renderDashboardPage(): string {
             </div>
           </div>
         </section>
+        -->
 
-        <section class="dashboard-section" aria-labelledby="institutions-heading">
+        <section class="dashboard-section dashboard-section-first" aria-labelledby="institutions-heading">
           <div class="section-head linked-head">
             <div class="section-title-row">
               <h1 class="section-title" id="institutions-heading">Linked Institutions</h1>
@@ -410,12 +412,13 @@ function renderDashboardPage(): string {
         accountSummary: document.getElementById("account-summary"),
         statusPill: document.getElementById("status-pill"),
         statusText: document.getElementById("status-text"),
-        netWorthRange: document.getElementById("net-worth-range"),
-        netWorthValue: document.getElementById("net-worth-value"),
-        netWorthChange: document.getElementById("net-worth-change"),
-        netWorthChart: document.getElementById("net-worth-chart"),
-        netWorthTooltip: document.getElementById("net-worth-tooltip"),
-        netWorthEmpty: document.getElementById("net-worth-empty"),
+        // Net Worth chart disabled — element lookups kept for easy re-enable.
+        // netWorthRange: document.getElementById("net-worth-range"),
+        // netWorthValue: document.getElementById("net-worth-value"),
+        // netWorthChange: document.getElementById("net-worth-change"),
+        // netWorthChart: document.getElementById("net-worth-chart"),
+        // netWorthTooltip: document.getElementById("net-worth-tooltip"),
+        // netWorthEmpty: document.getElementById("net-worth-empty"),
         institutions: document.getElementById("institutions"),
         accounts: document.getElementById("accounts"),
         empty: document.getElementById("empty")
@@ -457,7 +460,9 @@ function renderDashboardPage(): string {
 
         els.accountSummary.textContent = accountSummaryText(accounts.length, payload.generatedAt);
 
-        renderNetWorth(payload.netWorth);
+        // Net Worth chart disabled — re-enable by uncommenting this call,
+        // the element lookups above, and the markup section in renderDashboardPage().
+        // renderNetWorth(payload.netWorth);
         renderInstitutions(groups, status);
         renderAccounts(groups);
       }

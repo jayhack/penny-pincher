@@ -18,6 +18,7 @@ import {
 } from "./backend.js";
 import { generateSigningKeyPair } from "./crypto.js";
 import { getAccountGroups, getStatus } from "./data.js";
+import { getLocalCacheStatus, getNetWorthSeries } from "./local-store.js";
 
 export interface DashboardOptions {
   port: number;
@@ -282,9 +283,15 @@ function stringListQuery(value: unknown): string[] | undefined {
 async function dashboardPayload() {
   const status = await getStatus();
   const accountGroups = status.linked ? await getAccountGroups() : [];
+  const [cache, netWorth] = await Promise.all([
+    getLocalCacheStatus(),
+    getNetWorthSeries({ days: 365 })
+  ]);
 
   return {
     status,
+    cache,
+    netWorth,
     configPath,
     generatedAt: new Date().toISOString(),
     accountGroups,
@@ -331,7 +338,28 @@ function renderDashboardPage(): string {
       </header>
 
       <main>
-        <section class="dashboard-section dashboard-section-first" aria-labelledby="institutions-heading">
+        <section class="dashboard-section dashboard-section-first" aria-labelledby="net-worth-heading">
+          <div class="section-head net-worth-head">
+            <div>
+              <h1 class="section-title" id="net-worth-heading">Net Worth</h1>
+              <span class="mono-up label-aux" id="net-worth-range">local cache · balance reconstruction</span>
+            </div>
+            <div class="net-worth-stats" aria-live="polite">
+              <span class="net-worth-value" id="net-worth-value">-</span>
+              <span class="net-worth-change mono-up" id="net-worth-change">-</span>
+            </div>
+          </div>
+          <div class="net-worth-chart panel">
+            <svg id="net-worth-chart" class="chart-svg" role="img" aria-label="Net worth over time"></svg>
+            <div id="net-worth-tooltip" class="chart-tooltip" hidden></div>
+            <div id="net-worth-empty" class="chart-empty" hidden>
+              <strong>No cache yet</strong>
+              <span class="mono">penny-pincher sync</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="dashboard-section" aria-labelledby="institutions-heading">
           <div class="section-head linked-head">
             <div class="section-title-row">
               <h1 class="section-title" id="institutions-heading">Linked Institutions</h1>
@@ -382,6 +410,12 @@ function renderDashboardPage(): string {
         accountSummary: document.getElementById("account-summary"),
         statusPill: document.getElementById("status-pill"),
         statusText: document.getElementById("status-text"),
+        netWorthRange: document.getElementById("net-worth-range"),
+        netWorthValue: document.getElementById("net-worth-value"),
+        netWorthChange: document.getElementById("net-worth-change"),
+        netWorthChart: document.getElementById("net-worth-chart"),
+        netWorthTooltip: document.getElementById("net-worth-tooltip"),
+        netWorthEmpty: document.getElementById("net-worth-empty"),
         institutions: document.getElementById("institutions"),
         accounts: document.getElementById("accounts"),
         empty: document.getElementById("empty")
@@ -423,8 +457,117 @@ function renderDashboardPage(): string {
 
         els.accountSummary.textContent = accountSummaryText(accounts.length, payload.generatedAt);
 
+        renderNetWorth(payload.netWorth);
         renderInstitutions(groups, status);
         renderAccounts(groups);
+      }
+
+      function renderNetWorth(netWorth) {
+        const points = netWorth && Array.isArray(netWorth.points) ? netWorth.points : [];
+        const hasSeries = points.length > 1;
+        const currencyCode = netWorth && netWorth.currencyCode ? netWorth.currencyCode : "USD";
+
+        els.netWorthValue.textContent = netWorth && netWorth.available
+          ? formatMoney(netWorth.currentNetWorth, currencyCode)
+          : "-";
+        els.netWorthChange.textContent = netWorth && netWorth.available
+          ? formatChange(netWorth.change, netWorth.changePercent, currencyCode)
+          : "cache empty";
+        els.netWorthChange.dataset.direction = netWorth && netWorth.change > 0 ? "up" : netWorth && netWorth.change < 0 ? "down" : "flat";
+        els.netWorthRange.textContent = hasSeries
+          ? formatShortDate(points[0].date) + " - " + formatShortDate(points[points.length - 1].date)
+          : "local cache · balance reconstruction";
+        els.netWorthEmpty.hidden = hasSeries;
+        els.netWorthChart.hidden = !hasSeries;
+
+        if (!hasSeries) {
+          els.netWorthChart.replaceChildren();
+          return;
+        }
+
+        drawNetWorthChart(points, currencyCode);
+      }
+
+      function drawNetWorthChart(points, currencyCode) {
+        const svg = els.netWorthChart;
+        svg.replaceChildren();
+        svg.setAttribute("viewBox", "0 0 840 280");
+        svg.setAttribute("preserveAspectRatio", "none");
+
+        const width = 840;
+        const height = 280;
+        const pad = { top: 22, right: 26, bottom: 42, left: 72 };
+        const chartWidth = width - pad.left - pad.right;
+        const chartHeight = height - pad.top - pad.bottom;
+        const values = points.map((point) => point.netWorth);
+        let min = Math.min(...values);
+        let max = Math.max(...values);
+        if (min === max) {
+          min -= Math.max(1, Math.abs(min) * 0.05);
+          max += Math.max(1, Math.abs(max) * 0.05);
+        }
+        const padding = (max - min) * 0.12;
+        min -= padding;
+        max += padding;
+
+        const xFor = (index) => pad.left + (points.length === 1 ? chartWidth : (index / (points.length - 1)) * chartWidth);
+        const yFor = (value) => pad.top + ((max - value) / (max - min)) * chartHeight;
+        const coords = points.map((point, index) => [xFor(index), yFor(point.netWorth)]);
+        const linePath = coords.map(([x, y], index) => (index === 0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2)).join(" ");
+        const areaPath = linePath
+          + " L" + xFor(points.length - 1).toFixed(2) + " " + (pad.top + chartHeight).toFixed(2)
+          + " L" + xFor(0).toFixed(2) + " " + (pad.top + chartHeight).toFixed(2)
+          + " Z";
+
+        for (let i = 0; i < 4; i += 1) {
+          const value = min + ((max - min) * i) / 3;
+          const y = yFor(value);
+          svg.append(svgEl("line", { x1: pad.left, y1: y, x2: width - pad.right, y2: y, class: "chart-grid-line" }));
+          const label = svgEl("text", { x: pad.left - 10, y: y + 4, class: "chart-axis-label", "text-anchor": "end" });
+          label.textContent = compactMoney(value, currencyCode);
+          svg.append(label);
+        }
+
+        const startLabel = svgEl("text", { x: pad.left, y: height - 14, class: "chart-axis-label", "text-anchor": "start" });
+        startLabel.textContent = formatShortDate(points[0].date);
+        const endLabel = svgEl("text", { x: width - pad.right, y: height - 14, class: "chart-axis-label", "text-anchor": "end" });
+        endLabel.textContent = formatShortDate(points[points.length - 1].date);
+
+        svg.append(
+          svgEl("path", { d: areaPath, class: "chart-area" }),
+          svgEl("path", { d: linePath, class: "chart-line" }),
+          startLabel,
+          endLabel
+        );
+
+        const hoverLine = svgEl("line", { y1: pad.top, y2: pad.top + chartHeight, class: "chart-hover-line" });
+        const hoverDot = svgEl("circle", { r: 4.8, class: "chart-hover-dot" });
+        hoverLine.setAttribute("hidden", "true");
+        hoverDot.setAttribute("hidden", "true");
+        svg.append(hoverLine, hoverDot);
+
+        svg.onpointermove = (event) => {
+          const rect = svg.getBoundingClientRect();
+          const x = ((event.clientX - rect.left) / rect.width) * width;
+          const rawIndex = Math.round(((x - pad.left) / chartWidth) * (points.length - 1));
+          const index = Math.max(0, Math.min(points.length - 1, rawIndex));
+          const point = points[index];
+          const cx = xFor(index);
+          const cy = yFor(point.netWorth);
+          hoverLine.removeAttribute("hidden");
+          hoverDot.removeAttribute("hidden");
+          hoverLine.setAttribute("x1", String(cx));
+          hoverLine.setAttribute("x2", String(cx));
+          hoverDot.setAttribute("cx", String(cx));
+          hoverDot.setAttribute("cy", String(cy));
+          showChartTooltip(event, point, currencyCode);
+        };
+
+        svg.onpointerleave = () => {
+          hoverLine.setAttribute("hidden", "true");
+          hoverDot.setAttribute("hidden", "true");
+          els.netWorthTooltip.hidden = true;
+        };
       }
 
       function renderInstitutions(groups, status) {
@@ -567,6 +710,34 @@ function renderDashboardPage(): string {
         return box;
       }
 
+      function showChartTooltip(event, point, currencyCode) {
+        els.netWorthTooltip.hidden = false;
+        els.netWorthTooltip.replaceChildren();
+        const value = document.createElement("strong");
+        value.textContent = formatMoney(point.netWorth, currencyCode);
+        const date = document.createElement("span");
+        date.textContent = formatLongDate(point.date);
+        els.netWorthTooltip.append(value, date);
+
+        const chartRect = els.netWorthChart.getBoundingClientRect();
+        const tooltipRect = els.netWorthTooltip.getBoundingClientRect();
+        const left = Math.min(
+          chartRect.width - tooltipRect.width - 12,
+          Math.max(12, event.clientX - chartRect.left + 14)
+        );
+        const top = Math.max(12, event.clientY - chartRect.top - tooltipRect.height - 12);
+        els.netWorthTooltip.style.left = left + "px";
+        els.netWorthTooltip.style.top = top + "px";
+      }
+
+      function svgEl(name, attrs) {
+        const el = document.createElementNS("http://www.w3.org/2000/svg", name);
+        for (const [key, value] of Object.entries(attrs || {})) {
+          el.setAttribute(key, String(value));
+        }
+        return el;
+      }
+
       function providerName(item) {
         return item.institutionName || item.institutionId || "Linked institution";
       }
@@ -612,6 +783,38 @@ function renderDashboardPage(): string {
         }
       }
 
+      function compactMoney(value, currencyCode) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          return "-";
+        }
+
+        try {
+          return new Intl.NumberFormat(undefined, {
+            style: "currency",
+            currency: currencyCode || "USD",
+            notation: "compact",
+            maximumFractionDigits: 1
+          }).format(value);
+        } catch {
+          return String(value);
+        }
+      }
+
+      function formatChange(value, percent, currencyCode) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          return "-";
+        }
+
+        const sign = value > 0 ? "+" : "";
+        const pct = typeof percent === "number" && Number.isFinite(percent)
+          ? " · " + sign + new Intl.NumberFormat(undefined, {
+              style: "percent",
+              maximumFractionDigits: 1
+            }).format(percent)
+          : "";
+        return sign + formatMoney(value, currencyCode) + pct;
+      }
+
       function formatDate(value) {
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) {
@@ -621,6 +824,32 @@ function renderDashboardPage(): string {
         return new Intl.DateTimeFormat(undefined, {
           dateStyle: "medium",
           timeStyle: "short"
+        }).format(date);
+      }
+
+      function formatShortDate(value) {
+        const date = new Date(value + "T00:00:00.000Z");
+        if (Number.isNaN(date.getTime())) {
+          return value;
+        }
+
+        return new Intl.DateTimeFormat(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric"
+        }).format(date);
+      }
+
+      function formatLongDate(value) {
+        const date = new Date(value + "T00:00:00.000Z");
+        if (Number.isNaN(date.getTime())) {
+          return value;
+        }
+
+        return new Intl.DateTimeFormat(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric"
         }).format(date);
       }
 
@@ -1119,6 +1348,155 @@ const DASHBOARD_STYLES = `
     margin-top: 0;
   }
 
+  .net-worth-head {
+    align-items: flex-end;
+  }
+
+  .net-worth-head > div:first-child {
+    display: grid;
+    gap: 8px;
+  }
+
+  .net-worth-stats {
+    display: grid;
+    justify-items: end;
+    gap: 8px;
+    min-width: min(360px, 100%);
+  }
+
+  .net-worth-value {
+    font-family: "Archivo Black", "Helvetica Neue", Arial, sans-serif;
+    font-size: clamp(2.1rem, 5vw, 4.4rem);
+    line-height: 0.95;
+    color: var(--glyph);
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+
+  .net-worth-change {
+    color: var(--stone);
+    font-size: 10px;
+    text-align: right;
+  }
+
+  .net-worth-change[data-direction="up"] {
+    color: var(--sovereign);
+  }
+
+  .net-worth-change[data-direction="down"] {
+    color: var(--spark);
+  }
+
+  .net-worth-chart {
+    position: relative;
+    min-height: clamp(260px, 36vw, 390px);
+    padding: 18px 18px 10px;
+    background:
+      linear-gradient(180deg, rgba(251, 244, 236, 0.76), rgba(255, 255, 255, 0.96));
+    overflow: hidden;
+  }
+
+  .chart-svg {
+    width: 100%;
+    height: clamp(220px, 31vw, 330px);
+    display: block;
+    overflow: visible;
+    touch-action: none;
+  }
+
+  .chart-grid-line {
+    stroke: rgba(11, 15, 34, 0.12);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .chart-axis-label {
+    fill: var(--stone);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+
+  .chart-area {
+    fill: rgba(208, 132, 84, 0.14);
+  }
+
+  .chart-line {
+    fill: none;
+    stroke: var(--sovereign);
+    stroke-width: 3.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .chart-hover-line {
+    stroke: var(--spark);
+    stroke-width: 1.25;
+    stroke-dasharray: 4 5;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .chart-hover-dot {
+    fill: var(--spark);
+    stroke: var(--paper);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .chart-tooltip {
+    position: absolute;
+    z-index: 3;
+    min-width: 148px;
+    padding: 10px 12px;
+    border: 1.5px solid var(--glyph);
+    border-radius: 2px;
+    background: var(--paper);
+    color: var(--glyph);
+    box-shadow: 3px 3px 0 var(--bloom);
+    pointer-events: none;
+  }
+
+  .chart-tooltip strong {
+    display: block;
+    font-family: "Archivo Black", "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.1;
+  }
+
+  .chart-tooltip span {
+    display: block;
+    margin-top: 5px;
+    color: var(--stone);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .chart-empty {
+    position: absolute;
+    inset: 18px;
+    display: grid;
+    place-content: center;
+    gap: 10px;
+    text-align: center;
+    border: 1px dashed rgba(11, 15, 34, 0.26);
+    color: var(--stone);
+  }
+
+  .chart-empty strong {
+    color: var(--glyph);
+    font-family: "Archivo Black", "Helvetica Neue", Arial, sans-serif;
+    font-size: 26px;
+    line-height: 1;
+  }
+
+  .chart-empty span {
+    font-size: 12px;
+    color: var(--spark);
+  }
+
   .institutions {
     display: flex;
     flex-wrap: wrap;
@@ -1426,10 +1804,25 @@ const DASHBOARD_STYLES = `
     }
 
     .label-row,
-    .section-head {
+    .section-head,
+    .net-worth-head {
       align-items: flex-start;
       flex-direction: column;
       gap: 8px;
+    }
+
+    .net-worth-stats {
+      justify-items: start;
+      min-width: 0;
+    }
+
+    .net-worth-value,
+    .net-worth-change {
+      text-align: left;
+    }
+
+    .net-worth-chart {
+      padding: 12px 8px 6px;
     }
 
     .dashboard-title {

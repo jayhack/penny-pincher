@@ -2,6 +2,7 @@ import {
   createCipheriv,
   createDecipheriv,
   createHash,
+  createHmac,
   generateKeyPairSync,
   randomBytes,
   randomUUID,
@@ -10,6 +11,7 @@ import {
 } from "node:crypto";
 
 const envelopePrefix = "fclw1";
+const localDataPrefix = "ppdb1";
 
 export interface KeyPair {
   publicKeyPem: string;
@@ -158,6 +160,54 @@ export function decryptTokenEnvelope(token: string, secret: string): TokenEnvelo
   }
 
   return payload;
+}
+
+export function generateLocalDatabaseKey(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function encryptLocalJson(value: unknown, secret: string): string {
+  const key = deriveEncryptionKey(secret);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const plaintext = Buffer.from(JSON.stringify(value), "utf8");
+  const ciphertext = Buffer.concat([
+    cipher.update(plaintext),
+    cipher.final()
+  ]);
+  const tag = cipher.getAuthTag();
+
+  return [
+    localDataPrefix,
+    iv.toString("base64url"),
+    ciphertext.toString("base64url"),
+    tag.toString("base64url")
+  ].join(".");
+}
+
+export function decryptLocalJson<T = unknown>(encrypted: string, secret: string): T {
+  const [prefix, iv, ciphertext, tag] = encrypted.split(".");
+
+  if (prefix !== localDataPrefix || !iv || !ciphertext || !tag) {
+    throw new Error("Invalid Penny Pincher local database payload.");
+  }
+
+  const decipher = createDecipheriv("aes-256-gcm", deriveEncryptionKey(secret), Buffer.from(iv, "base64url"));
+  decipher.setAuthTag(Buffer.from(tag, "base64url"));
+  const plaintext = Buffer.concat([
+    decipher.update(Buffer.from(ciphertext, "base64url")),
+    decipher.final()
+  ]);
+
+  return JSON.parse(plaintext.toString("utf8")) as T;
+}
+
+export function localBlindIndex(kind: string, value: string, secret: string): string {
+  return createHmac("sha256", deriveEncryptionKey(secret))
+    .update(kind)
+    .update("\0")
+    .update(value)
+    .digest("base64url");
 }
 
 function canonicalRequest(options: {

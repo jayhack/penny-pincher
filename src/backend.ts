@@ -17,6 +17,7 @@ export interface LinkTokenRequest {
   environment: PlaidEnvironment;
   products: string[];
   countryCodes: string[];
+  transactionsDaysRequested?: number;
   redirectUri?: string;
 }
 
@@ -202,14 +203,30 @@ async function postJson<TResult>(backendUrl: string, path: string, body: unknown
     body: JSON.stringify(body)
   });
   const text = await response.text();
-  const parsed = text ? JSON.parse(text) : undefined;
+  const parsed = parseJsonResponse(text);
 
   if (!response.ok) {
     const errorBody = parsed as BackendErrorBody | undefined;
-    throw new Error(errorBody?.error ?? `Penny Pincher backend returned HTTP ${response.status}.`);
+    throw new Error(errorBody?.error ?? `Penny Pincher backend returned HTTP ${response.status} for ${path}.`);
+  }
+
+  if (parsed === undefined && text) {
+    throw new Error(`Penny Pincher backend returned non-JSON response for ${path}.`);
   }
 
   return parsed as TResult;
+}
+
+function parseJsonResponse(text: string): unknown {
+  if (!text) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 export function normalizeBackendUrl(url: string): string {

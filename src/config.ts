@@ -28,6 +28,7 @@ const configSchema = z.object({
   mode: linkedAccountModeSchema.default("hosted"),
   backendUrl: z.string().url().optional(),
   items: z.array(linkedAccountItemSchema).default([]),
+  localDatabaseKey: z.string().optional(),
   tokenEnvelope: z.string().optional(),
   publicKeyPem: z.string().optional(),
   privateKeyPem: z.string().optional(),

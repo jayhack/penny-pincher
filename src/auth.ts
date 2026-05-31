@@ -25,6 +25,7 @@ export interface AuthOptions {
   environment: PlaidEnvironment;
   products: string[];
   countryCodes: string[];
+  transactionsDaysRequested?: number;
   port: number;
   openBrowser: boolean;
   directPlaid: boolean;
@@ -87,6 +88,7 @@ async function runHostedAuthFlow(options: AuthOptions): Promise<PennyPincherConf
     environment: options.environment,
     products: options.products,
     countryCodes: options.countryCodes,
+    transactionsDaysRequested: options.transactionsDaysRequested,
     redirectUri
   });
 
@@ -256,6 +258,7 @@ async function runDirectAuthFlow(options: AuthOptions): Promise<PennyPincherConf
     products: options.products as never,
     country_codes: options.countryCodes as never,
     language: "en",
+    transactions: linkTransactionsOptions(options.products, options.transactionsDaysRequested) as never,
     redirect_uri: redirectUri
   });
 
@@ -284,6 +287,16 @@ async function runDirectAuthFlow(options: AuthOptions): Promise<PennyPincherConf
       return config;
     }
   });
+}
+
+function linkTransactionsOptions(products: string[], daysRequested: number | undefined) {
+  if (!products.includes("transactions") || !daysRequested) {
+    return undefined;
+  }
+
+  return {
+    days_requested: daysRequested
+  };
 }
 
 async function runLocalLinkFlow(options: AuthOptions & {

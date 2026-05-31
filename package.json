@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "@inquirer/prompts": "latest",
+    "better-sqlite3": "^12.10.0",
     "chalk": "latest",
     "commander": "latest",
     "dotenv": "latest",
@@ -48,6 +49,7 @@
     "zod": "latest"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "latest",
     "@types/node": "latest",
     "@vercel/node": "^5.8.2",

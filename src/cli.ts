@@ -25,6 +25,12 @@ import {
   getTransactions,
   getUsage
 } from "./data.js";
+import {
+  getLocalCacheStatus,
+  purgeLocalCache,
+  readLocalCache,
+  syncLocalCache
+} from "./local-store.js";
 import { startDashboard } from "./dashboard.js";
 
 const require = createRequire(import.meta.url);
@@ -45,7 +51,15 @@ class CliError extends Error {
 program
   .name("penny-pincher")
   .description("Agent-friendly CLI for reading bank data through Plaid.")
-  .version(cliVersion);
+  .version(cliVersion)
+  .addHelpText("after", `
+Local SQLite cache:
+  penny-pincher sync       Hydrates ~/.penny-pincher/penny.db from Plaid/backend.
+  penny-pincher cache ...  Reads the encrypted local cache without calling Plaid.
+  penny-pincher dashboard  Reads the cache for the net worth chart; it does not sync automatically.
+
+If the SQLite DB is deleted, run penny-pincher sync to rebuild it. The cache key lives in ~/.penny-pincher/config.json.
+`);
 
 program.configureOutput({
   writeErr: (value) => {
@@ -61,6 +75,7 @@ program
   .addOption(environmentOption())
   .option("-p, --products <products>", "Comma-separated Plaid products to request.", "transactions")
   .option("-c, --country-codes <codes>", "Comma-separated country codes.", "US")
+  .option("--history-days <days>", "Transaction history to request during Plaid Link, up to 730 days.", parseInteger, 730)
   .option("--port <port>", "Local auth server port.", parsePort, 7777)
   .option(
     "--backend <url>",
@@ -78,6 +93,7 @@ program
       environment,
       products: splitList(options.products),
       countryCodes: splitList(options.countryCodes),
+      transactionsDaysRequested: boundedInteger(options.historyDays, "history-days", 1, 730),
       port: options.port,
       openBrowser: Boolean(options.open),
       directPlaid: Boolean(options.directPlaid),
@@ -110,7 +126,7 @@ program
 
 program
   .command("dashboard")
-  .description("Open a local dashboard for linked accounts.")
+  .description("Open a local dashboard; net worth reads from the encrypted SQLite cache.")
   .option("--port <port>", "Local dashboard server port.", parsePort, 7778)
   .option("--no-open", "Print the dashboard URL without opening a browser.")
   .addOption(jsonOption())
@@ -167,6 +183,57 @@ program
   .action(async (options) => {
     printJson(await getRecurring({
       accountIds: options.accountIds ? splitList(options.accountIds) : undefined
+    }));
+  });
+
+program
+  .command("sync")
+  .description("Hydrate or update the encrypted local SQLite cache from Plaid/backend.")
+  .option("--count <count>", "Plaid page size for transaction sync.", parseInteger, 500)
+  .option("--max-pages <pages>", "Maximum pages to pull per linked item.", parseInteger, 100)
+  .option("--days-requested <days>", "Transaction history to request when sync initializes Transactions.", parseInteger, 730)
+  .option("--investment-start <yyyy-mm-dd>", "Investment transactions start date.")
+  .option("--investment-end <yyyy-mm-dd>", "Investment transactions end date.", today())
+  .option("--investment-days <days>", "Investment transaction days back when --investment-start is omitted.", parseInteger, 730)
+  .addOption(new Option("--investments", "Cache investment holdings and investment transactions for Items with investments enabled.").default(true))
+  .addOption(new Option("--no-investments", "Skip investment holdings and investment transactions."))
+  .option("--reset", "Delete the local cache file before syncing.")
+  .addOption(jsonOption())
+  .action(async (options) => {
+    const investmentEndDate = options.investmentEnd;
+    const investmentStartDate = options.investmentStart ?? daysBefore(investmentEndDate, options.investmentDays);
+    printJson(await syncLocalCache({
+      count: boundedInteger(options.count, "count", 1, 500),
+      maxPages: boundedInteger(options.maxPages, "max-pages", 1, 1000),
+      daysRequested: boundedInteger(options.daysRequested, "days-requested", 1, 730),
+      reset: Boolean(options.reset),
+      investments: Boolean(options.investments),
+      investmentStartDate,
+      investmentEndDate
+    }));
+  });
+
+program
+  .command("cache")
+  .description("Read the encrypted local SQLite cache without calling Plaid.")
+  .argument("[kind]", "summary, accounts, transactions, holdings, or investment-transactions.", "summary")
+  .option("--start <yyyy-mm-dd>", "Start date for transaction-like cache reads.")
+  .option("--end <yyyy-mm-dd>", "End date for transaction-like cache reads.", today())
+  .option("--days <days>", "Number of days back when --start is omitted.", parseInteger, 30)
+  .option("--count <count>", "Maximum rows to return for transaction-like cache reads.", parseInteger, 100)
+  .addOption(jsonOption())
+  .action(async (kind, options) => {
+    const normalizedKind = normalizeCacheKind(kind);
+    const endDate = options.end;
+    const startDate = options.start ?? (
+      normalizedKind === "transactions" || normalizedKind === "investment-transactions"
+        ? daysBefore(endDate, options.days)
+        : undefined
+    );
+    printJson(await readLocalCache(normalizedKind, {
+      startDate,
+      endDate,
+      count: boundedInteger(options.count, "count", 1, 10000)
     }));
   });
 
@@ -231,15 +298,20 @@ program
 program
   .command("logout")
   .description("Remove the locally saved Plaid access token.")
+  .option("--purge-data", "Also delete the encrypted local SQLite cache and remove its key from config.json.")
   .addOption(jsonOption())
   .action(async (options) => {
     await clearLinkedAccount();
+    const purged = options.purgeData ? await purgeLocalCache() : undefined;
     if (options.json) {
-      printJson({ ok: true, linked: false, configPath });
+      printJson({ ok: true, linked: false, configPath, purged });
       return;
     }
 
     console.error(chalk.green("Removed local Plaid token."));
+    if (purged) {
+      console.error(chalk.green("Deleted local cache data."));
+    }
   });
 
 program
@@ -291,7 +363,9 @@ function buildInteractiveChoices(config: PennyPincherConfig): Array<{ name: stri
       { name: "Open dashboard", value: ["dashboard"] },
       { name: "Show balances", value: ["balances"] },
       { name: "Show recent transactions", value: ["transactions"] },
-      { name: "Show recurring charges", value: ["recurring"] }
+      { name: "Show recurring charges", value: ["recurring"] },
+      { name: "Sync local cache", value: ["sync"] },
+      { name: "Show local cache summary", value: ["cache"] }
     );
   }
 
@@ -305,6 +379,7 @@ function buildInteractiveChoices(config: PennyPincherConfig): Array<{ name: stri
 
 async function getReadinessReport() {
   const status = await getStatus();
+  const cache = await getLocalCacheStatus();
   const linked = status.linked;
   const availableCommands = [
     "penny-pincher status --json",
@@ -313,6 +388,8 @@ async function getReadinessReport() {
     linked ? "penny-pincher balances" : undefined,
     linked ? "penny-pincher transactions --days 30" : undefined,
     linked ? "penny-pincher recurring" : undefined,
+    linked ? "penny-pincher sync" : undefined,
+    cache.exists ? "penny-pincher cache transactions --days 30" : undefined,
     linked ? "penny-pincher identity" : undefined,
     linked ? "penny-pincher numbers" : undefined,
     "penny-pincher auth",
@@ -323,6 +400,7 @@ async function getReadinessReport() {
     cli: "penny-pincher",
     version: cliVersion,
     ...status,
+    cache,
     configPath,
     requiresHuman: !linked,
     nextCommand: linked ? "penny-pincher transactions --days 30" : "penny-pincher auth",
@@ -404,14 +482,48 @@ function parseInteger(value: string): number {
   return parsed;
 }
 
+function boundedInteger(value: number, label: string, min: number, max: number): number {
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new CliError("invalid_integer", `${label} must be between ${min} and ${max}.`);
+  }
+
+  return value;
+}
+
+function normalizeCacheKind(value: string): string {
+  const kind = value.trim().toLowerCase();
+  const allowed = new Set(["summary", "accounts", "transactions", "holdings", "investment-transactions"]);
+
+  if (!allowed.has(kind)) {
+    throw new CliError(
+      "invalid_cache_kind",
+      `Invalid cache kind: ${value}. Use summary, accounts, transactions, holdings, or investment-transactions.`
+    );
+  }
+
+  return kind;
+}
+
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return formatLocalIsoDate(new Date());
 }
 
 function daysBefore(endDate: string, days: number): string {
-  const date = new Date(`${endDate}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() - days);
-  return date.toISOString().slice(0, 10);
+  const date = localDateFromIsoDate(endDate);
+  date.setDate(date.getDate() - days);
+  return formatLocalIsoDate(date);
+}
+
+function localDateFromIsoDate(value: string): Date {
+  const [year, month, day] = value.split("-").map((part) => Number.parseInt(part, 10));
+  return new Date(year, month - 1, day);
+}
+
+function formatLocalIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function hasJsonFlag(argv: string[]): boolean {

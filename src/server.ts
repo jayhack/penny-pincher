@@ -26,6 +26,7 @@ const linkTokenSchema = z.object({
   environment: z.string().optional(),
   products: z.array(z.string()).default(["transactions"]),
   countryCodes: z.array(z.string()).default(["US"]),
+  transactionsDaysRequested: z.number().int().positive().max(730).optional(),
   redirectUri: z.string().url().optional()
 });
 
@@ -43,8 +44,19 @@ const transactionsPayloadSchema = z.object({
   endDate: z.string(),
   count: z.number().int().positive().max(500).default(100)
 });
+const transactionsSyncPayloadSchema = z.object({
+  cursor: z.string().optional(),
+  count: z.number().int().positive().max(500).default(500),
+  daysRequested: z.number().int().positive().max(730).optional()
+});
 const recurringPayloadSchema = z.object({
   accountIds: z.array(z.string()).optional()
+});
+const investmentsTransactionsPayloadSchema = z.object({
+  startDate: z.string(),
+  endDate: z.string(),
+  count: z.number().int().positive().max(500).default(500),
+  offset: z.number().int().nonnegative().default(0)
 });
 
 const plaidHosts: Record<PlaidEnvironment, string> = {
@@ -53,7 +65,16 @@ const plaidHosts: Record<PlaidEnvironment, string> = {
   production: PlaidEnvironments.production
 };
 
-export type DataKind = "accounts" | "balances" | "transactions" | "recurring" | "identity" | "numbers";
+export type DataKind =
+  | "accounts"
+  | "balances"
+  | "transactions"
+  | "transactions-sync"
+  | "recurring"
+  | "investments-holdings"
+  | "investments-transactions"
+  | "identity"
+  | "numbers";
 
 export async function linkTokenHandler(request: VercelRequest, response: VercelResponse): Promise<void> {
   await withJsonPost(request, response, async () => {
@@ -68,6 +89,7 @@ export async function linkTokenHandler(request: VercelRequest, response: VercelR
       products: body.products as never,
       country_codes: body.countryCodes as never,
       language: "en",
+      transactions: linkTransactionsOptions(body.products, body.transactionsDaysRequested) as never,
       redirect_uri: body.redirectUri ?? process.env.PLAID_REDIRECT_URI
     });
 
@@ -76,6 +98,16 @@ export async function linkTokenHandler(request: VercelRequest, response: VercelR
       environment
     });
   });
+}
+
+function linkTransactionsOptions(products: string[], daysRequested: number | undefined) {
+  if (!products.includes("transactions") || !daysRequested) {
+    return undefined;
+  }
+
+  return {
+    days_requested: daysRequested
+  };
 }
 
 export async function exchangeHandler(request: VercelRequest, response: VercelResponse): Promise<void> {
@@ -187,6 +219,31 @@ async function callPlaidDataEndpoint(
     };
   }
 
+  if (kind === "transactions-sync") {
+    const options = transactionsSyncPayloadSchema.parse(payload);
+    const response = await client.transactionsSync({
+      access_token: accessToken,
+      cursor: options.cursor,
+      count: options.count,
+      options: options.cursor || !options.daysRequested
+        ? undefined
+        : {
+            days_requested: options.daysRequested
+          }
+    });
+
+    return {
+      accounts: response.data.accounts,
+      added: response.data.added,
+      modified: response.data.modified,
+      removed: response.data.removed,
+      nextCursor: response.data.next_cursor,
+      hasMore: response.data.has_more,
+      transactionsUpdateStatus: response.data.transactions_update_status,
+      requestId: response.data.request_id
+    };
+  }
+
   if (kind === "recurring") {
     const options = recurringPayloadSchema.parse(payload);
     const response = await client.transactionsRecurringGet({
@@ -200,6 +257,44 @@ async function callPlaidDataEndpoint(
       updatedDatetime: response.data.updated_datetime,
       personalFinanceCategoryVersion: response.data.personal_finance_category_version,
       requestId: response.data.request_id
+    };
+  }
+
+  if (kind === "investments-holdings") {
+    const response = await client.investmentsHoldingsGet({
+      access_token: accessToken
+    });
+
+    return {
+      accounts: response.data.accounts,
+      holdings: response.data.holdings,
+      securities: response.data.securities,
+      item: response.data.item,
+      requestId: response.data.request_id,
+      isInvestmentsFallbackItem: response.data.is_investments_fallback_item
+    };
+  }
+
+  if (kind === "investments-transactions") {
+    const options = investmentsTransactionsPayloadSchema.parse(payload);
+    const response = await client.investmentsTransactionsGet({
+      access_token: accessToken,
+      start_date: options.startDate,
+      end_date: options.endDate,
+      options: {
+        count: options.count,
+        offset: options.offset
+      }
+    });
+
+    return {
+      item: response.data.item,
+      accounts: response.data.accounts,
+      securities: response.data.securities,
+      investmentTransactions: response.data.investment_transactions,
+      totalInvestmentTransactions: response.data.total_investment_transactions,
+      requestId: response.data.request_id,
+      isInvestmentsFallbackItem: response.data.is_investments_fallback_item
     };
   }
 
